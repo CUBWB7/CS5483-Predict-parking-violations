@@ -90,10 +90,53 @@
 
 ---
 
-## Phase 2 — 特征工程
+## Phase 2 — 特征工程 ✅
 
-**日期**: 2026-04-04 – 06（计划）  
-**状态**: 未开始
+**日期**: 2026-04-02  
+**状态**: 已完成（Tier 1 + Tier 2）
+
+### 产出
+- [x] `notebooks/02_feature_engineering.ipynb` — 完整特征工程 notebook（已验证 Restart & Run All）
+- [x] `data/train_features_tier1.parquet` / `data/test_features_tier1.parquet` — Tier 1 检查点
+- [x] `data/train_features_tier2.parquet` / `data/test_features_tier2.parquet` — Tier 2 检查点
+- [x] `data/encoding_maps_tier1.pkl` / `data/encoding_maps_tier2.pkl` — 编码映射
+
+### 特征清单（26 个特征）
+
+| Tier | 特征 | 类型 | Spearman ρ | 备注 |
+|------|------|------|-----------|------|
+| 原始 | total_count | int32 | -0.295 | 最强原始预测因子 |
+| T1 | log_total_count | float32 | -0.295 | 对数变换 |
+| T1 | count_bin | int8 | -0.289 | 分箱 (0,1,2,3,4) |
+| T1 | grid_te | float32 | **+0.307** | ⭐ 区域 K-Fold Target Encoding |
+| T1 | hour_sin/cos | float32 | ~0.01-0.04 | 周期编码 |
+| T1 | dow_sin/cos | float32 | ~0.002-0.005 | 周期编码 |
+| T1 | month_sin/cos | float32 | ~0.03-0.06 | 周期编码 |
+| T2 | grid_period_te | float32 | **+0.311** | ⭐ 区域×时段交叉 TE |
+| T2 | time_period | int8 | 0.010 | 时段分箱 (0-5) |
+| T2 | is_raining | int8 | 0.001 | 天气二元 |
+| T2 | has_snow | int8 | 0.000 | 天气二元 |
+| T2 | grid_avg_count | float32 | -0.169 | 区域平均检查数 |
+| T2 | grid_sample_count | float32 | -0.158 | 区域样本数 |
+| T2 | grid_violation_std | float32 | +0.064 | 区域违规率波动 |
+
+### 关键发现与决策
+
+| 发现 / 决策 | 详情 |
+|-------------|------|
+| GRID_SIZE 调整 | 0.001→0.00005；原值只产生14个网格（坐标跨度仅~0.002-0.005），调整后产生742个网格 |
+| grid_te 验证通过 | ρ=0.307，在预期范围 [0.1, 0.7] 内，无数据泄露 |
+| grid_period_te 最强特征 | ρ=0.311，略优于 grid_te，说明区域×时段交叉有增益 |
+| 天气二元特征极弱 | is_raining / has_snow 的 ρ < 0.001，但保留给模型判断 |
+| grid_id 乘数调整 | 0.00005 grid_size 需要更大的乘数（100000 而非 10000）避免 ID 碰撞 |
+| pyarrow 安装 | 环境缺少 pyarrow，已通过 pip 安装 |
+| pandas dtype 兼容性 | K-Fold TE 函数使用 numpy 数组避免 float32/64 类型冲突 |
+
+### 未完成项（Tier 3，可选）
+- [ ] 区域 × 星期交叉编码
+- [ ] 温度离散化
+- [ ] KMeans 空间聚类
+- [ ] 6 小时天气窗口平均
 
 ---
 

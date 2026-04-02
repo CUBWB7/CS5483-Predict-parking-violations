@@ -11,7 +11,7 @@
 ```
 4/2  ✅ Phase 0: 环境搭建（已完成）
 4/2  ✅ Phase 1: EDA（已完成，产出 01_eda.ipynb + 7 张图表）
-4/4-6   Phase 2: 特征工程（3 天，⚠️ 最关键阶段，分 Tier 1/2/3）
+4/2  ✅ Phase 2: 特征工程（已完成，Tier 1+2，产出 02_feature_engineering.ipynb + 26 特征）
 4/7-9   Phase 3: 建模（3 天，含首次平台提交）
 4/10    Phase 4: 评估分析（1 天，消融实验 + SHAP）
 4/11    Phase 5: 可视化（1 天，生成报告/视频共用图表）
@@ -147,16 +147,21 @@ train_df['invalid_ratio'] = y_train['invalid_ratio'].astype('float32')
 
 ---
 
-## 四、Phase 2 — 特征工程（4/4-6）⚠️ 最关键阶段
+## 四、Phase 2 — 特征工程（4/2 完成）✅
 
 ### 目标
 构建特征工程管道，产出 `notebooks/02_feature_engineering.ipynb`，将训练集和测试集的特征从 10 个扩展到 20-30 个。
 
 ### 检查点
-- [ ] train/test 特征 parquet 已保存
-- [ ] encoding maps 已保存（用于测试集）
-- [ ] 无 NaN 残留
-- [ ] 新特征与目标的 Spearman ρ 合理（区域 TE 约 0.3-0.5，不应超过 0.7——超过说明有泄露）
+- [x] train/test 特征 parquet 已保存
+- [x] encoding maps 已保存（用于测试集）
+- [x] 无 NaN 残留
+- [x] 新特征与目标的 Spearman ρ 合理（grid_te ρ=0.307，grid_period_te ρ=0.311，均在 0.1-0.7 内）
+
+### 实际执行修正
+- **GRID_SIZE**: 计划中写 0.001，实际改为 **0.00005**（坐标跨度仅 ~0.002-0.005，0.001 只产生 14 个网格，改后产生 742 个网格）
+- **grid_id 乘数**: 从 `*10000` 改为 `*100000`（配合更小的 grid_size 避免 ID 碰撞）
+- **K-Fold TE 实现**: 使用 numpy 数组而非 pandas Series，避免 float32/64 dtype 冲突
 
 ### 总体原则
 1. **训练集和测试集特征工程流程必须一致**
@@ -217,13 +222,13 @@ train_df['month_cos'] = np.cos(2 * np.pi * (train_df['month_of_year'] - 1) / 12)
 # --- 网格化 ---
 # 先观察坐标范围，选择合适的 grid_size
 # longitude_scaled 范围 ~0.98-1.00，latitude_scaled 范围 ~0.99-1.00
-# grid_size = 0.001 大约对应城市中的 ~100m 网格
-GRID_SIZE = 0.001  # 可能需要实验调整
+# 实际使用 0.00005（0.001 对缩放坐标太大，只产生 14 个网格）
+GRID_SIZE = 0.00005  # 产生 742 个网格，平均每格 ~8000 样本
 
 train_df['grid_lon'] = (train_df['longitude_scaled'] / GRID_SIZE).astype('int32')
 train_df['grid_lat'] = (train_df['latitude_scaled'] / GRID_SIZE).astype('int32')
-# 用整数组合作为 grid_id（比字符串拼接更快更省内存）
-train_df['grid_id'] = train_df['grid_lon'] * 10000 + train_df['grid_lat']
+# 用整数组合作为 grid_id（乘数需大于 grid_lat 的最大值）
+train_df['grid_id'] = train_df['grid_lon'] * 100000 + train_df['grid_lat']
 ```
 
 ```python

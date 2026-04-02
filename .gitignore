@@ -1,5 +1,7 @@
 # 数据文件（太大，不上传 GitHub，队友请从 ChallengeData 下载）
 163-Predict parking violations/*.csv
+data/*.parquet
+data/*.pkl
 
 # macOS
 .DS_Store
