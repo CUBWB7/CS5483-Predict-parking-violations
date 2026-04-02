@@ -50,7 +50,11 @@
 ```
 ├── 163-Predict parking violations/   # 数据（不入 Git）
 ├── background/                       # 课程指南
-├── docs/                             # 项目文档、论文综述
+├── docs/
+│   ├── project_plan.md               # 项目概览（高层时间线和策略）
+│   ├── literature_review.md          # 7 篇论文综述
+│   ├── plan/detailed_plan.md         # 详细实施计划（操作指南，按此执行）
+│   └── logs/                         # 每日开发日志
 ├── research_parking_violations/      # 研究资料、教程、论文 PDF
 ├── notebooks/                        # Jupyter Notebooks（主要代码）
 ├── environment.yml                   # Conda 环境
@@ -58,7 +62,7 @@
 ```
 
 ## 编码规范
-- Notebook 中使用中文注释
+- Notebook 中不要出现中文，因为这是英文课程的项目，要提交的文件的语言应当是英文
 - 固定随机种子 `SEED = 42`
 - 代码要能 Restart & Run All 复现
 - 训练集/测试集特征工程流程必须一致
