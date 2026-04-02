@@ -26,6 +26,10 @@ build/
 # Claude Code（私有配置）
 .claude/
 
+# 研究资料和课程背景（不需要入 Git）
+background/
+research_parking_violations/
+
 # Models & submissions（太大，本地保留）
 models/
 submissions/
