@@ -140,10 +140,61 @@
 
 ---
 
-## Phase 3 — 建模
+## Phase 3 — 建模 ✅
 
-**日期**: 2026-04-07 – 09（计划）  
-**状态**: 未开始
+**日期**: 2026-04-02  
+**状态**: 已完成
+
+### 产出
+- [x] `notebooks/03_modeling.ipynb` — 建模 notebook（已执行，含输出）
+- [x] `models/lgbm_fold{0-4}.txt` — 5 个 LightGBM fold 模型
+- [x] `models/xgb_fold{0-4}.json` — 5 个 XGBoost fold 模型
+- [x] `models/lgb_oof_preds.npy` / `lgb_test_preds.npy` — LightGBM OOF & 测试预测
+- [x] `models/xgb_oof_preds.npy` / `xgb_test_preds.npy` — XGBoost OOF & 测试预测
+- [x] `submissions/lgbm_v1.csv` — LightGBM 提交文件
+- [x] `submissions/xgb_v1.csv` — XGBoost 提交文件
+- [x] `submissions/ensemble_v1.csv` — 集成提交文件
+- [x] `figures/lgbm_feature_importance.png` — 特征重要性图
+
+### 模型结果
+
+| 模型 | OOF Spearman | 平台分数 | 备注 |
+|------|-------------|---------|------|
+| RF Baseline (10 trees, 500K) | 0.937* | — | *训练集评估，非 OOF |
+| LightGBM 5-Fold CV | 0.5815 | 0.5182 | 26 特征，3000 轮 |
+| **XGBoost 5-Fold CV** | **0.5870** | 待提交 | 26 特征，3000 轮 |
+| **Ensemble (LGB=0.30)** | **0.5880** | **0.5223** | 加权平均 |
+
+### LightGBM 详细结果
+- Fold scores: 0.5828, 0.5816, 0.5812, 0.5812, 0.5807（极稳定，std=0.0008）
+- 早停指标: l2（自定义 Spearman eval 太慢，改用 l2 后每 fold ~3 分钟）
+- 所有 fold 跑到 3000 轮上限（早停未触发）
+
+### XGBoost 详细结果
+- Fold scores: 0.5879, 0.5876, 0.5866, 0.5862, 0.5866（极稳定，std=0.0006）
+- 参数: max_depth=6, tree_method=hist, 3000 轮
+- RMSE 从 0.365 下降到 0.292（仍在下降，可增加轮数）
+- 每 fold ~5 分钟
+
+### 集成结果
+- 最优权重: LGB=0.30, XGB=0.70（XGBoost 贡献更大）
+- 集成 OOF Spearman 0.5880（比单模型微幅提升 +0.0010）
+- 测试预测范围 [0.041, 1.000]，均值 0.536
+
+### 平台提交
+- LightGBM: CV 0.5815 → 平台 0.5182（差距 0.063）
+- Ensemble: CV 0.5880 → 平台 0.5223（差距 0.066）
+- 集成比单 LGB 平台分提升 +0.004
+- CV-平台差距稳定在 ~0.06，可能原因: Target Encoding 训练/测试分布差异 + 模型略过拟合
+
+### 关键决策
+
+| 决策 | 理由 |
+|------|------|
+| l2/rmse 替代 Spearman 做早停 | 自定义 Spearman eval 在 120 万行上每轮排序太慢 |
+| 26 个 Tier 2 特征 | 包含 grid_te、grid_period_te 等区域编码特征 |
+| 5-Fold CV + OOF | 无偏评估 + 为集成提供 OOF 预测 |
+| 网格搜索最优集成权重 | LGB=0.30 最优，XGBoost 表现更好 |
 
 ---
 

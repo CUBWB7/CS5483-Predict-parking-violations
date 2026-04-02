@@ -26,6 +26,14 @@ build/
 # Claude Code（私有配置）
 .claude/
 
+# Models & submissions（太大，本地保留）
+models/
+submissions/
+catboost_info/
+
+# Duplicate notebooks
+notebooks/*_executed.ipynb
+
 # 临时文件
 *.tmp
 *.bak

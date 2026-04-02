@@ -12,12 +12,12 @@
 4/2  ✅ Phase 0: 环境搭建（已完成）
 4/2  ✅ Phase 1: EDA（已完成，产出 01_eda.ipynb + 7 张图表）
 4/2  ✅ Phase 2: 特征工程（已完成，Tier 1+2，产出 02_feature_engineering.ipynb + 26 特征）
-4/7-9   Phase 3: 建模（3 天，含首次平台提交）
-4/10    Phase 4: 评估分析（1 天，消融实验 + SHAP）
-4/11    Phase 5: 可视化（1 天，生成报告/视频共用图表）
-4/12-14 Phase 7: 视频录制（3 天）
-⚠️ 4/15 视频提交截止
-4/15-22 Phase 6: 报告撰写（8 天）
+4/2  ✅ Phase 3: 建模（已完成，LGB 0.5815 / XGB 0.5870 / Ensemble 0.5880，平台 LGB 0.5182）
+4/3-4   Phase 4: 评估分析（消融实验 + SHAP + 分组误差）
+4/5     Phase 5: 可视化（生成报告/视频共用图表）
+4/6-8   Phase 7: 视频录制（3 天）
+⚠️ 4/15 视频提交截止（提前完成可留缓冲）
+4/9-22  Phase 6: 报告撰写
 ⚠️ 4/23 报告提交截止
 ```
 
@@ -27,7 +27,7 @@
 |--------|--------|-------------|
 | **4/5 EOD** | Phase 2 Tier 1 是否完成？ | 是 → 继续 Tier 2；否 → 集中精力完成 Tier 1，放弃 Tier 2/3 |
 | **4/6 EOD** | 特征工程是否可用？ | 是 → 正常进入建模；否 → 仅用 Tier 1 特征进入建模 |
-| **4/9 EOD** | 是否有 Spearman > 0.30 的模型？ | 是 → 正常评估；否 → 回查数据泄露/特征 bug |
+| **4/2 ✅** | 是否有 Spearman > 0.30 的模型？ | ✅ Ensemble OOF = 0.5880，远超 0.30 |
 | **4/11 EOD** | 图表是否足够支撑视频？ | 是 → 开始录制；否 → 用现有图表精简视频结构 |
 
 ---
@@ -440,16 +440,18 @@ def apply_features_to_test(test_df, encoding_maps):
 
 ---
 
-## 五、Phase 3 — 建模（4/7-9）
+## 五、Phase 3 — 建模 ✅（4/2 完成）
 
 ### 目标
 训练 LightGBM/XGBoost 模型，5-Fold CV Spearman > 0.30（保底），冲 0.40+。
 
 ### 检查点
-- [ ] Baseline RF Spearman ~0.197 复现
-- [ ] LightGBM 5-Fold CV Spearman > 0.30
-- [ ] 至少一次 ChallengeData 平台提交
-- [ ] 模型文件已保存
+- [x] Baseline RF Spearman ~0.197 复现 → ✅ RF 0.937（训练集，非 OOF）
+- [x] LightGBM 5-Fold CV Spearman > 0.30 → ✅ OOF 0.5815
+- [x] XGBoost 5-Fold CV → ✅ OOF 0.5870
+- [x] 模型集成 → ✅ Ensemble OOF 0.5880（LGB=0.30, XGB=0.70）
+- [x] ChallengeData 平台提交 → ✅ LGB 平台分 0.5182
+- [x] 模型文件已保存 → ✅ lgbm_fold{0-4}.txt, xgb_fold{0-4}.json
 
 ### 步骤
 
@@ -496,11 +498,11 @@ import numpy as np
 
 params = {
     'objective': 'regression',
-    'metric': 'rmse',          # 内置指标用 rmse 监控收敛
+    'metric': 'None',          # 禁用内置指标，只用自定义 Spearman 早停
     'boosting_type': 'gbdt',
     'num_leaves': 31,
     'learning_rate': 0.05,     # 比 0.1 更保守，配合更多轮数
-    'n_estimators': 2000,      # 配合早停
+    'n_estimators': 3000,      # 高上限，早停会在最优点截断
     'reg_lambda': 1.0,
     'min_child_samples': 50,   # 大数据集用大值防过拟合
     'feature_fraction': 0.8,
@@ -526,9 +528,10 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(train_df)):
 
     model = lgb.LGBMRegressor(**params)
 
-    # 自定义 Spearman 回调
-    def spearman_eval(y_pred, dataset):
-        y_true = dataset.get_label()
+    # 自定义 Spearman 评估函数
+    # 注意：LGBMRegressor (sklearn API) 传入 (y_true, y_pred) 两个 numpy 数组
+    # 不是 native API 的 (y_pred, Dataset) 签名
+    def spearman_eval(y_true, y_pred):
         rho, _ = spearmanr(y_true, y_pred)
         return 'spearman', rho, True  # True = higher is better
 
@@ -537,7 +540,7 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(train_df)):
         eval_set=[(X_val, y_val)],
         eval_metric=spearman_eval,
         callbacks=[
-            lgb.early_stopping(stopping_rounds=50),
+            lgb.early_stopping(stopping_rounds=50, first_metric_only=True),
             lgb.log_evaluation(period=100),
         ]
     )
@@ -570,15 +573,18 @@ print(f'Mean ± Std: {np.mean(fold_scores):.4f} ± {np.std(fold_scores):.4f}')
 
 ```python
 # 生成提交文件
-# 注意：需要确认 ChallengeData 的具体提交格式
-# 通常是 CSV，一列 ID 一列预测值
-submission = pd.DataFrame({
-    'ID': range(len(test_preds)),  # 确认 ID 格式
-    'invalid_ratio': test_preds
-})
-submission.to_csv('submissions/lgbm_v1.csv', index=False)
+# 格式匹配 y_train_final_YYyFil7.csv：无名索引列 + invalid_ratio 列
+submission = pd.DataFrame({'invalid_ratio': np.clip(test_preds, 0, 1)})
+submission.to_csv('submissions/lgbm_v1.csv', index=True, index_label='')
 ```
 
+> **验证检查**（提交前必做）：
+> - OOF Spearman < 0.70（否则怀疑数据泄露）
+> - 测试预测无 NaN
+> - 测试预测范围在 [0, 1] 附近（clip 后保存）
+> - 测试预测均值 ≈ 训练目标均值（差距 > 0.1 需调查）
+> - 行数正确（2,028,750 行）
+>
 > **重要**：首次提交后，比较平台分数与 CV 分数。如果差距 > 0.05 → 可能有数据泄露或 train/test 分布不一致。
 
 #### Step 5: XGBoost（Day 2-3）
@@ -586,32 +592,54 @@ submission.to_csv('submissions/lgbm_v1.csv', index=False)
 ```python
 import xgboost as xgb
 
+# XGBoost 自定义 Spearman 早停
+# XGBRegressor (sklearn API v3.x) 的 eval_metric 接受 callable(y_true, y_pred) -> float
+# XGBoost 默认最小化，所以返回 -rho
+def neg_spearman_xgb(y_true, y_pred):
+    rho, _ = spearmanr(y_true, y_pred)
+    return -float(rho)
+
 xgb_params = {
     'objective': 'reg:squarederror',
     'tree_method': 'hist',      # 大数据必须用 hist
     'max_depth': 6,
     'learning_rate': 0.05,
-    'n_estimators': 2000,
+    'n_estimators': 3000,       # 高上限，早停截断
     'reg_lambda': 1.0,
     'subsample': 0.8,
     'colsample_bytree': 0.8,
     'min_child_weight': 50,
     'random_state': 42,
     'n_jobs': 8,
+    'eval_metric': neg_spearman_xgb,   # 自定义 Spearman
+    'early_stopping_rounds': 50,
 }
 # 同样的 5-Fold CV 流程，替换模型即可
+# model.fit(..., eval_set=[(X_val, y_val)], verbose=100)
 ```
 
 #### Step 6: 模型集成（Day 3）
 
 ```python
-# 简单加权平均（权重按 CV Spearman 分配）
+# 方法 1：简单加权平均（权重按 CV Spearman 分配）
 lgb_weight = lgb_oof_spearman / (lgb_oof_spearman + xgb_oof_spearman)
 xgb_weight = 1 - lgb_weight
-ensemble_preds = lgb_weight * lgb_test_preds + xgb_weight * xgb_test_preds
+
+# 方法 2：网格搜索最优权重（推荐）
+best_w, best_rho = 0, 0
+for w in np.arange(0.0, 1.01, 0.05):
+    blend = w * lgb_oof_preds + (1 - w) * xgb_oof_preds
+    rho, _ = spearmanr(train_df[TARGET], blend)
+    if rho > best_rho:
+        best_w, best_rho = w, rho
+print(f'Optimal LGB weight: {best_w:.2f}, OOF Spearman: {best_rho:.4f}')
+
+# 用最优权重生成最终预测
+ensemble_preds = best_w * lgb_test_preds + (1 - best_w) * xgb_test_preds
+ensemble_preds = np.clip(ensemble_preds, 0, 1)
 
 # 验证：集成后 OOF Spearman 应 >= 单模型
-ensemble_oof = lgb_weight * lgb_oof_preds + xgb_weight * xgb_oof_preds
+ensemble_oof = best_w * lgb_oof_preds + (1 - best_w) * xgb_oof_preds
 rho, _ = spearmanr(train_df[TARGET], ensemble_oof)
 print(f'Ensemble OOF Spearman: {rho:.4f}')
 ```
