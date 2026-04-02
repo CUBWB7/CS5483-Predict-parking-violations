@@ -1,0 +1,29 @@
+# 数据文件（太大，不上传 GitHub，队友请从 ChallengeData 下载）
+163-Predict parking violations/*.csv
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.ipynb_checkpoints/
+
+# Conda/Pip
+*.egg
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code（私有配置）
+.claude/
+
+# 临时文件
+*.tmp
+*.bak
