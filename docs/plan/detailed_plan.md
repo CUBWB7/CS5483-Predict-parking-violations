@@ -13,7 +13,7 @@
 4/2  ✅ Phase 1: EDA（已完成，产出 01_eda.ipynb + 7 张图表）
 4/2  ✅ Phase 2: 特征工程（已完成，Tier 1+2，产出 02_feature_engineering.ipynb + 26 特征）
 4/2  ✅ Phase 3: 建模（已完成，LGB 0.5815 / XGB 0.5870 / Ensemble 0.5880，平台 LGB 0.5182）
-4/3-4   Phase 4: 评估分析（消融实验 + SHAP + 分组误差）
+4/3  ✅ Phase 4: 评估分析（已完成，消融实验 + SHAP + 分组误差 + 11 张图）
 4/5     Phase 5: 可视化（生成报告/视频共用图表）
 4/6-8   Phase 7: 视频录制（3 天）
 ⚠️ 4/15 视频提交截止（提前完成可留缓冲）
@@ -659,53 +659,260 @@ print(f'Ensemble OOF Spearman: {rho:.4f}')
 ## 六、Phase 4 — 评估分析（4/10）
 
 ### 目标
-完成 `notebooks/04_evaluation.ipynb`，产出消融实验表、SHAP 分析图、分组误差分析。
+完成 `notebooks/04_evaluation.ipynb`，产出消融实验表、SHAP 分析图、分组误差分析、预测分布分析、OOF-平台 gap 分析。
 
 ### 检查点
-- [ ] 消融实验表格完成（5+ 行对比）
-- [ ] SHAP Summary Plot + 至少 2 个 Dependence Plot
+- [ ] 消融实验表格完成（6 行对比，Spearman 递增）
+- [ ] SHAP Summary Plot + Bar Plot + 3 个 Dependence Plot
 - [ ] 模型对比表格（RF / LightGBM / XGBoost / Ensemble）
+- [ ] 分组误差分析（按 count_bin + total_count=1 噪声分析）
+- [ ] 预测分布对比 + 校准曲线
+- [ ] OOF-平台 gap 分析（TE 分布偏移）
 
-### 消融实验设计（参考 Paper 2）
+### 执行顺序（优化）
 
-| 实验 | 使用特征 | 预期 Spearman |
-|------|---------|--------------|
-| Baseline | 原始 10 特征 | ~0.20 |
-| + total_count 变换 | + log_count, count_bin | ~0.22-0.25 |
-| + 周期编码 | + sin/cos ×6 | ~0.25-0.30 |
-| + 空间特征 | + grid_te | ~0.35-0.45 |
-| + 交叉特征 | + grid_period_te | ~0.40-0.50 |
-| + 天气增强 | + is_raining 等 | ~0.40-0.50 |
+先做不需要训练的分析（Section 1-2, 4-6），再跑消融实验和 SHAP，最大化效率。
 
-> 实现方式：对每组特征分别跑 LightGBM 5-Fold CV，记录 Spearman。
+1. **Section 1-2, 4-6**（无需训练，~30 min）
+2. **Section 3**（消融实验，~35 min 训练时间）
+3. **Section 7**（SHAP，~3 min）
+4. **Section 8**（汇总）
 
-### SHAP 分析
+### Section 1: 加载数据和已有结果
+
+```python
+import numpy as np, pandas as pd
+from scipy.stats import spearmanr
+from sklearn.model_selection import KFold
+
+SEED = 42
+TARGET = 'invalid_ratio'
+
+train_df = pd.read_parquet('../data/train_features_tier2.parquet')
+test_df = pd.read_parquet('../data/test_features_tier2.parquet')
+lgb_oof = np.load('../models/lgb_oof_preds.npy')
+xgb_oof = np.load('../models/xgb_oof_preds.npy')
+ens_oof = 0.30 * lgb_oof + 0.70 * xgb_oof
+
+FEATURES = [col for col in train_df.columns
+            if col not in [TARGET, 'grid_lon', 'grid_lat', 'grid_id', 'grid_period']]
+ORIG_FEATURES = ['total_count', 'longitude_scaled', 'latitude_scaled',
+                 'Precipitations', 'HauteurNeige', 'Temperature',
+                 'ForceVent', 'day_of_week', 'month_of_year', 'hour']
+```
+
+### Section 2: 模型对比表
+
+```python
+lgb_oof_rho, _ = spearmanr(train_df[TARGET], lgb_oof)
+xgb_oof_rho, _ = spearmanr(train_df[TARGET], xgb_oof)
+ens_oof_rho, _ = spearmanr(train_df[TARGET], ens_oof)
+
+results = pd.DataFrame({
+    'Model': ['RF Baseline (official)', 'LightGBM 5-Fold', 'XGBoost 5-Fold',
+              'Ensemble (30% LGB + 70% XGB)'],
+    'OOF Spearman': ['—', f'{lgb_oof_rho:.4f}', f'{xgb_oof_rho:.4f}', f'{ens_oof_rho:.4f}'],
+    'Platform Score': ['0.197', '0.5182', '—', '0.5222'],
+})
+```
+
+生成柱状图保存到 `figures/model_comparison.png`。
+
+### Section 3: 消融实验（最耗时部分）
+
+> **优化**：使用 800 轮代替 3000 轮（相对排序不变，节省约 60% 时间）。
+> 全特征 3000 轮结果（0.5815）已知，作为锚点参考。
+
+```python
+import lightgbm as lgb
+
+ABLATION_GROUPS = {
+    'Baseline (10 orig)': ORIG_FEATURES,
+    '+ count transforms': ORIG_FEATURES + ['log_total_count', 'count_bin'],
+    '+ periodic encoding': ORIG_FEATURES + ['log_total_count', 'count_bin',
+        'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'month_sin', 'month_cos'],
+    '+ spatial TE': ORIG_FEATURES + ['log_total_count', 'count_bin',
+        'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'month_sin', 'month_cos',
+        'grid_te'],
+    '+ cross TE': ORIG_FEATURES + ['log_total_count', 'count_bin',
+        'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'month_sin', 'month_cos',
+        'grid_te', 'grid_period_te', 'time_period'],
+    'Full (26 features)': FEATURES,
+}
+
+ablation_params = {
+    'objective': 'regression', 'metric': 'l2', 'boosting_type': 'gbdt',
+    'num_leaves': 31, 'learning_rate': 0.05, 'n_estimators': 800,
+    'reg_lambda': 1.0, 'min_child_samples': 50, 'feature_fraction': 0.8,
+    'bagging_fraction': 0.8, 'bagging_freq': 5, 'verbose': -1,
+    'n_jobs': 8, 'random_state': SEED,
+}
+
+kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
+ablation_results = {}
+
+for name, feats in ABLATION_GROUPS.items():
+    oof = np.zeros(len(train_df))
+    for train_idx, val_idx in kf.split(train_df):
+        model = lgb.LGBMRegressor(**ablation_params)
+        model.fit(train_df.iloc[train_idx][feats], train_df.iloc[train_idx][TARGET],
+                  eval_set=[(train_df.iloc[val_idx][feats], train_df.iloc[val_idx][TARGET])],
+                  callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)])
+        oof[val_idx] = model.predict(train_df.iloc[val_idx][feats])
+    rho, _ = spearmanr(train_df[TARGET], oof)
+    ablation_results[name] = rho
+    print(f'{name}: Spearman = {rho:.4f}')
+```
+
+**更新后的预期 Spearman 值**（基于 Phase 3 实际结果调整）：
+
+| 实验 | 使用特征 | 预期 Spearman (800 轮) | 参考 (3000 轮) |
+|------|---------|----------------------|---------------|
+| Baseline | 原始 10 特征 | ~0.20-0.22 | ~0.22-0.25 |
+| + count transforms | + log_count, count_bin | ~0.22-0.26 | ~0.25-0.28 |
+| + periodic encoding | + sin/cos ×6 | ~0.26-0.32 | ~0.30-0.35 |
+| + spatial TE | + grid_te | ~0.42-0.48 | ~0.48-0.53 |
+| + cross TE | + grid_period_te, time_period | ~0.46-0.52 | ~0.53-0.57 |
+| Full (26 features) | 全部 | ~0.50-0.55 | 0.5815 (已知) |
+
+> 关键发现预期：grid_te + grid_period_te 贡献大部分提升（约从 0.30 跳到 0.52），
+> 确认空间目标编码是最关键的特征工程决策。
+
+生成消融柱状图保存到 `figures/ablation_study.png`。
+
+### Section 4: 分组误差分析
+
+```python
+# 按 count_bin 分组
+print('=== Spearman by count_bin ===')
+for bin_val in sorted(train_df['count_bin'].unique()):
+    mask = train_df['count_bin'] == bin_val
+    rho, _ = spearmanr(train_df.loc[mask, TARGET], ens_oof[mask])
+    print(f'count_bin={bin_val}: n={mask.sum():,} ({100*mask.sum()/len(train_df):.1f}%), '
+          f'Spearman={rho:.4f}')
+
+# total_count=1 噪声分析（25% 数据只能取 0 或 1，噪声极大）
+print('\n=== Noise Analysis: total_count thresholds ===')
+for label, mask in [('total_count = 1', train_df['total_count'] == 1),
+                     ('total_count > 1', train_df['total_count'] > 1),
+                     ('total_count >= 10', train_df['total_count'] >= 10)]:
+    rho, _ = spearmanr(train_df.loc[mask, TARGET], ens_oof[mask])
+    print(f'{label}: n={mask.sum():,}, Spearman={rho:.4f}')
+```
+
+> total_count=1 的样本违规率只有 0 或 1（二元值），模型很难排序。
+> 预期 total_count≥10 子集的 Spearman 会显著高于整体，揭示数据的"噪声下限"。
+
+生成分组 Spearman 柱状图保存到 `figures/grouped_spearman.png`。
+
+### Section 5: 预测分布分析
+
+```python
+import matplotlib.pyplot as plt
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# 叠加直方图：实际 vs OOF 预测 vs 测试预测
+axes[0].hist(train_df[TARGET], bins=50, alpha=0.5, label='Actual target', density=True)
+axes[0].hist(ens_oof, bins=50, alpha=0.5, label='OOF predictions', density=True)
+axes[0].hist(np.clip(0.30 * np.load('../models/lgb_test_preds.npy')
+             + 0.70 * np.load('../models/xgb_test_preds.npy'), 0, 1),
+             bins=50, alpha=0.5, label='Test predictions', density=True)
+axes[0].set_title('Prediction Distribution')
+axes[0].legend()
+
+# 校准曲线：分十档对比平均预测 vs 平均实际
+deciles = pd.qcut(ens_oof, 10, duplicates='drop')
+cal_df = pd.DataFrame({'pred': ens_oof, 'actual': train_df[TARGET].values, 'bin': deciles})
+cal_grouped = cal_df.groupby('bin').agg(pred_mean=('pred', 'mean'), actual_mean=('actual', 'mean'))
+axes[1].plot([0, 1], [0, 1], 'k--', alpha=0.3, label='Perfect calibration')
+axes[1].scatter(cal_grouped['pred_mean'], cal_grouped['actual_mean'], s=80)
+axes[1].set_xlabel('Mean Predicted'); axes[1].set_ylabel('Mean Actual')
+axes[1].set_title('Calibration Plot (Decile-binned)')
+axes[1].legend()
+
+plt.tight_layout()
+plt.savefig('../figures/prediction_distribution.png', dpi=150, bbox_inches='tight')
+```
+
+> 目标分布是 U 型（15.9% 为 0，26.6% 为 1），但模型预测通常集中在中间。
+> 校准曲线应大致沿对角线，偏离说明某个预测区间存在系统性偏差。
+
+### Section 6: OOF-平台 Gap 分析
+
+```python
+# LGB vs XGB OOF 相关性（衡量模型多样性，低相关 = 高集成收益）
+lgb_xgb_corr, _ = spearmanr(lgb_oof, xgb_oof)
+print(f'LGB-XGB OOF Spearman correlation: {lgb_xgb_corr:.4f}')
+
+# Target Encoding 分布偏移检查
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+for i, col in enumerate(['grid_te', 'grid_period_te']):
+    axes[i].hist(train_df[col], bins=50, alpha=0.5, label='Train', density=True)
+    axes[i].hist(test_df[col], bins=50, alpha=0.5, label='Test', density=True)
+    axes[i].set_title(f'{col} Distribution: Train vs Test')
+    axes[i].legend()
+plt.tight_layout()
+plt.savefig('../figures/te_distribution_shift.png', dpi=150, bbox_inches='tight')
+```
+
+> OOF-平台 gap（0.5880 → 0.5222 ≈ 0.066）主要原因：
+> K-Fold Target Encoding 在训练集内部有轻微信息泄露（5-fold 并非完全隔离），
+> 而测试集用全训练集编码，分布可能存在偏移。
+
+### Section 7: SHAP 分析
 
 ```python
 import shap
+import lightgbm as lgb
 
-# 采样避免内存/速度问题
-sample = train_df.sample(5000, random_state=42)
-explainer = shap.TreeExplainer(models[0])  # 用第一个 fold 的模型
+# 从磁盘加载模型（不是内存中的 models[0]）
+model = lgb.Booster(model_file='../models/lgbm_fold0.txt')
+explainer = shap.TreeExplainer(model)
+sample = train_df.sample(10000, random_state=42)
 shap_values = explainer.shap_values(sample[FEATURES])
 
-# Summary Plot（特征重要性排序 + 影响方向）
-shap.summary_plot(shap_values, sample[FEATURES])
+# Fig 1: Summary plot (beeswarm) — 报告用
+shap.summary_plot(shap_values, sample[FEATURES], show=False)
+plt.tight_layout()
+plt.savefig('../figures/shap_summary.png', dpi=150, bbox_inches='tight')
+plt.close()
 
-# Dependence Plot（展示非线性关系）
-shap.dependence_plot('grid_te', shap_values, sample[FEATURES])
-shap.dependence_plot('log_total_count', shap_values, sample[FEATURES])
+# Fig 2: Bar plot — 视频用（更简洁）
+shap.summary_plot(shap_values, sample[FEATURES], plot_type='bar', show=False)
+plt.tight_layout()
+plt.savefig('../figures/shap_bar.png', dpi=150, bbox_inches='tight')
+plt.close()
+
+# Fig 3-5: Dependence plots for top 3 features
+for feat in ['grid_period_te', 'grid_te', 'total_count']:
+    shap.dependence_plot(feat, shap_values, sample[FEATURES], show=False)
+    plt.tight_layout()
+    plt.savefig(f'../figures/shap_dep_{feat}.png', dpi=150, bbox_inches='tight')
+    plt.close()
 ```
 
-### 分组误差分析
+> 注意：使用 10K 样本（比原计划 5K 多一倍，图表更平滑，TreeExplainer 仍然很快）。
+> Dependence plot 覆盖 grid_period_te（最强特征）、grid_te、total_count（最强原始特征）。
 
-```python
-# 按 total_count 分组分析模型表现
-for bin_val in sorted(train_df['count_bin'].unique()):
-    mask = train_df['count_bin'] == bin_val
-    rho, _ = spearmanr(train_df.loc[mask, TARGET], oof_preds[mask])
-    print(f'count_bin={bin_val}: n={mask.sum()}, Spearman={rho:.4f}')
-```
+### Section 8: 结果汇总
+
+汇编所有分析结果为 markdown 表格，作为报告 Chapter 5 的素材。
+
+### Phase 4 产出图表清单
+
+| # | 图表 | 文件名 | 用途 |
+|---|------|--------|------|
+| 1 | 模型对比柱状图 | `model_comparison.png` | 报告 Ch.5 + 视频 |
+| 2 | 消融实验柱状图 | `ablation_study.png` | 报告 Ch.5 + 视频 |
+| 3 | SHAP summary (beeswarm) | `shap_summary.png` | 报告 Ch.5 |
+| 4 | SHAP bar plot | `shap_bar.png` | 视频 |
+| 5 | SHAP dep: grid_period_te | `shap_dep_grid_period_te.png` | 报告 Ch.5 |
+| 6 | SHAP dep: grid_te | `shap_dep_grid_te.png` | 报告 Ch.5 |
+| 7 | SHAP dep: total_count | `shap_dep_total_count.png` | 报告 Ch.5 |
+| 8 | 预测分布 + 校准曲线 | `prediction_distribution.png` | 报告 Ch.5 |
+| 9 | 分组 Spearman 柱状图 | `grouped_spearman.png` | 报告 Discussion |
+| 10 | TE 分布偏移对比 | `te_distribution_shift.png` | 报告 Discussion |
 
 ---
 

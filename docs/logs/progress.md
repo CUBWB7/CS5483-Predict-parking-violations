@@ -198,28 +198,91 @@
 
 ---
 
-## Phase 4 — 评估分析
+## Phase 4 — 评估分析 ✅
 
-**日期**: 2026-04-10（计划）  
-**状态**: 未开始
+**日期**: 2026-04-03  
+**状态**: 已完成
+
+### 产出
+- [x] `notebooks/04_evaluation.ipynb` — 完整评估 notebook（26 cells，已验证 Restart & Run All）
+- [x] 11 张图表保存至 `figures/`
+
+### 图表清单
+
+| # | 图表 | 文件名 | 用途 |
+|---|------|--------|------|
+| 1 | 模型对比柱状图 | `model_comparison.png` | 报告 Ch.5 + 视频 |
+| 2 | 消融实验柱状图 | `ablation_study.png` | 报告 Ch.5 + 视频 |
+| 3 | 分组 Spearman 柱状图 | `grouped_spearman.png` | 报告 Discussion |
+| 4 | 预测分布 + 校准曲线 | `prediction_distribution.png` | 报告 Ch.5 |
+| 5 | 预测 vs 真实 hexbin 散点图 | `pred_vs_actual.png` | 报告 Ch.5 |
+| 6 | TE 分布偏移对比 | `te_distribution_shift.png` | 报告 Discussion |
+| 7 | SHAP Summary (beeswarm) | `shap_summary.png` | 报告 Ch.5 |
+| 8 | SHAP Bar Plot | `shap_bar.png` | 视频 |
+| 9 | SHAP Dep: grid_period_te | `shap_dep_grid_period_te.png` | 报告 Ch.5 |
+| 10 | SHAP Dep: grid_te | `shap_dep_grid_te.png` | 报告 Ch.5 |
+| 11 | SHAP Dep: total_count | `shap_dep_total_count.png` | 报告 Ch.5 |
+
+### 消融实验结果（3000 rounds, 5-Fold LightGBM）
+
+| 特征组 | Spearman | 增量 |
+|--------|---------|------|
+| Baseline (10 orig) | 0.5679 | — |
+| + count transforms | 0.5712 | +0.0033 |
+| + periodic encoding | 0.5677 | -0.0035 |
+| + spatial TE | 0.5746 | +0.0069 |
+| + cross TE | 0.5771 | +0.0025 |
+| Full (26 features) | 0.5815 | +0.0044 |
+
+### 分组误差分析
+
+| 分组 | Spearman | 样本占比 |
+|------|---------|---------|
+| count_bin=0 (total_count=1) | 0.4106 | 25.2% |
+| count_bin=1 | 0.5678 | 18.9% |
+| count_bin=2 | 0.6486 | 28.8% |
+| count_bin=3 | 0.6811 | 22.1% |
+| count_bin=4 | 0.7304 | 4.9% |
+
+### SHAP Top 5 特征
+1. `total_count` — 远超其他，count 越大 → 违规率越低
+2. `grid_period_te` — 区域×时段交叉编码
+3. `longitude_scaled` — 空间经度
+4. `latitude_scaled` — 空间纬度
+5. `month_of_year` — 季节性
+
+### OOF-Platform Gap 分析
+- LGB: 0.5815 → 0.5182 (gap: 0.063)
+- Ensemble: 0.5880 → 0.5222 (gap: 0.066)
+- LGB-XGB OOF 相关性: 0.9778（模型多样性有限）
+- TE 分布偏移 KS stat: grid_te 0.0117, grid_period_te 0.0102（轻微）
+
+### 关键发现
+| 发现 | 详情 |
+|------|------|
+| TE 是最大特征工程贡献 | spatial TE + cross TE 合计 +0.0094 |
+| 周期编码单独略降 | 与原始 hour/month 冗余，但完整模型中有用 |
+| 小样本噪声是主要瓶颈 | total_count=1 占 25%，Spearman 仅 0.41 |
+| 模型能力强 | total_count>=10 时 Spearman 达 0.69 |
+| Ensemble 增益有限 | LGB-XGB 相关性 0.98，仅提升 +0.001 |
 
 ---
 
 ## Phase 5 — 可视化
 
-**日期**: 2026-04-11（计划）  
+**日期**: 2026-04-05（计划）  
 **状态**: 未开始
 
 ---
 
 ## Phase 6 — 报告
 
-**日期**: 2026-04-15 – 22（计划）  
+**日期**: 2026-04-09 – 22（计划）  
 **状态**: 未开始
 
 ---
 
 ## Phase 7 — 视频
 
-**日期**: 2026-04-12 – 14（计划）  
+**日期**: 2026-04-06 – 08（计划）  
 **状态**: 未开始
