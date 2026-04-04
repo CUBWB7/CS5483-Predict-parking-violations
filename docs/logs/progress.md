@@ -268,9 +268,148 @@
 
 ---
 
-## Phase 5 — 可视化
+## Phase 5a — 提分改进 🔄
 
-**日期**: 2026-04-05（计划）  
+**日期**: 2026-04-03  
+**状态**: 进行中
+
+### 改进计划
+- [x] `docs/plan/improvement_plan.md` — 7 步提分计划（英文）
+
+### 第一批：Step 1 + Step 2 + Step 6 ✅
+
+| Step | 改动 | 结果 |
+|------|------|------|
+| Step 1: 改进 TE | 5-fold→10-fold, smooth 30/50→100/150, KDTree fallback | KS stat 降幅仅 0.001，未达 0.005 目标 |
+| Step 2: 增加轮数 | n_estimators 3000→8000, lr 0.05→0.03, ES 50→100 | **主要贡献者，OOF 显著提升** |
+| Step 6: Rank Normalization | 排序归一化映射到训练分布 | **反而降分 -0.007，已废弃** |
+
+#### v2 结果
+
+| 模型 | OOF Spearman | vs v1 |
+|------|-------------|-------|
+| LGB v2 | 0.5959 | +0.0144 |
+| XGB v2 | 0.5994 | +0.0124 |
+| Ensemble v2 | 0.6012 | +0.0132 |
+
+#### 平台提交
+
+| 提交文件 | Platform 得分 | vs v1 |
+|---------|-------------|-------|
+| ensemble_v2_raw.csv | **0.5338** | **+0.0116** |
+| ensemble_v2_ranked.csv | 0.5266 | +0.0044 |
+
+- OOF-Platform 差距: 0.6012 - 0.5338 = 0.0674（未缩小）
+- 两个模型都跑满 8000 轮未触发早停，仍欠训练
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| Step 2 是主要贡献 | lr 降低 + 更多轮数带来 OOF +0.012~0.014 |
+| Step 1 效果有限 | 10-fold + 高 smoothing 对 KS stat 改善微弱，TE 偏移主因非 fold 数 |
+| Rank Norm 有害 | Spearman(before, after)=0.988≠1.0，且强制映射到训练分布引入噪声 |
+| 模型仍欠训练 | 8000 轮 loss 仍在下降，后续应增加到 10000+ |
+
+### 第二批：Step 3 + Step 4 ✅
+
+**日期**: 2026-04-04  
+**状态**: 已完成
+
+#### Step 3: Optuna 超参调优
+
+- optuna 4.8.0, 子采样 1M 行, 3-Fold CV, 50 trials/model
+- LGB best subsample Spearman: 0.5853 (trial 47)
+- XGB best subsample Spearman: 0.5901 (trial 28)
+- 全量 6M 重训: 10000 rounds, ES=150
+
+**Optuna 最优参数:**
+
+| 参数 | LightGBM | XGBoost |
+|------|----------|---------|
+| num_leaves / max_depth | 100 | 10 |
+| learning_rate | 0.0564 | 0.0362 |
+| min_child_samples / weight | 69 | 11 |
+| reg_lambda | 0.452 | 1.561 |
+| reg_alpha | 1.243 | 1.239 |
+| feature_fraction / colsample | 0.844 | 0.951 |
+| bagging_fraction / subsample | 0.972 | 0.948 |
+
+**v3 全量重训结果:**
+
+| 模型 | OOF Spearman | Fold std | best_iter | 训练时间 |
+|------|-------------|----------|-----------|---------|
+| LGB v3 | 0.6322 | 0.0006 | 9999-10000 (未触发ES) | 93 min |
+| XGB v3 | 0.6379 | 0.0005 | 5909-6234 (触发ES) | 88 min |
+
+#### Step 4: CatBoost 第三模型
+
+- `grid_id` + `grid_period` 作为原生类别特征（ordered TE，无手动 TE 偏移）
+- 8000 iterations, depth=6, ES=100（未调参）
+- 5 个 fold 均跑满 8000 轮未触发早停，总耗时 378 min（~6.3 小时）
+
+| 模型 | OOF Spearman | Fold std | 备注 |
+|------|-------------|----------|------|
+| CatBoost | 0.5728 | 0.0007 | 远低于调参后的 LGB/XGB |
+
+#### Inter-Model Correlations
+
+| 模型对 | 相关性 | vs v2 |
+|--------|--------|-------|
+| LGB-XGB | 0.9652 | 0.9778 → 降低 ✅ |
+| LGB-CB | 0.9330 | — (新增) |
+| XGB-CB | 0.9109 | — (新增) |
+
+#### 3-Model Ensemble
+
+- 最优权重: LGB=0.35, XGB=0.65, CB=0.00
+- CatBoost 权重为 0 — OOF 0.5728 远低于 LGB/XGB (0.63+)，即使多样性高也无法补偿精度差距
+- **Ensemble v3 OOF: 0.6408**
+
+#### v3 结果汇总
+
+| 模型 | v1 OOF | v2 OOF | v3 OOF | 提升 (v2→v3) |
+|------|--------|--------|--------|-------------|
+| LightGBM | 0.5815 | 0.5959 | **0.6322** | **+0.0363** |
+| XGBoost | 0.5870 | 0.5994 | **0.6379** | **+0.0385** |
+| CatBoost | — | — | 0.5728 | (新增) |
+| Ensemble | 0.5880 | 0.6012 | **0.6408** | **+0.0396** |
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| Optuna 调参效果巨大 | OOF 从 0.60 跳到 0.64，远超预期 (+0.01~0.02) |
+| XGBoost 触发早停 | best_iter ~6000, 说明 Optuna 参数在 10000 rounds 下足够收敛 |
+| LGB 仍未触发早停 | 10000 轮 loss 仍在下降，可能还有边际提升空间 |
+| CatBoost 未调参导致弱 | 默认参数 OOF 0.5728，未对 ensemble 产生贡献 |
+| Optuna 总耗时 ~5 小时 | LGB 160 min + XGB 132 min (on M4 Mac) |
+| CatBoost 训练极慢 | 原生 categorical (742 categories) 导致每 fold ~75 min |
+
+### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `notebooks/05_improvement.ipynb` | 提分 notebook（31 cells） |
+| `docs/plan/improvement_plan.md` | 7 步提分计划 |
+| `models/[lgb\|xgb]_[oof\|test]_v2.npy` | v2 预测文件 |
+| `models/[lgb\|xgb\|cb]_[oof\|test]_v3.npy` | v3 预测文件 |
+| `submissions/ensemble_v2_raw.csv` | v2 提交（平台 0.5338） |
+| `submissions/ensemble_v2_ranked.csv` | v2 rank norm 提交（平台 0.5266） |
+| `submissions/ensemble_v3.csv` | v3 提交（待提交平台） |
+
+### 待完成
+
+- [ ] 提交 ensemble_v3.csv 到平台
+- [ ] Step 5: Stacking 元学习器（视 v3 平台分数决定）
+- [ ] Step 7: Tier 3 特征工程（视时间决定）
+- [ ] 仅用 LGB+XGB 的 v3 提交（CatBoost 无贡献，可省略）
+
+---
+
+## Phase 5b — 可视化
+
+**日期**: 待定  
 **状态**: 未开始
 
 ---
