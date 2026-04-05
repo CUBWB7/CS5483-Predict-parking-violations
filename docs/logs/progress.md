@@ -398,12 +398,88 @@
 | `submissions/ensemble_v2_ranked.csv` | v2 rank norm 提交（平台 0.5266） |
 | `submissions/ensemble_v3.csv` | v3 提交（待提交平台） |
 
+### 第三批：Step 4b — CatBoost Optuna 调参 ✅
+
+**日期**: 2026-04-05  
+**状态**: 已完成（GPU 服务器运行，33.7 min）
+
+#### Optuna 最优参数（40 trials, 500K subsample, 3-Fold）
+
+| 参数 | 值 |
+|------|----|
+| depth | 10 |
+| learning_rate | 0.0827 |
+| l2_leaf_reg | 4.12 |
+| random_strength | 6.24 |
+| bagging_temperature | 0.449 |
+| border_count | 235 |
+| min_data_in_leaf | 21 |
+
+#### CB v4 全量重训结果（5-Fold, GPU, 8000 iterations）
+
+| Fold | Spearman | best_iter |
+|------|---------|-----------|
+| 0 | 0.6182 | 7999 |
+| 1 | 0.6175 | 7999 |
+| 2 | 0.6179 | 7999 |
+| 3 | 0.6163 | 7999 |
+| 4 | 0.6175 | 7998 |
+| **OOF** | **0.6175** | 均未触发 ES |
+
+训练时间: **33.7 min**（GPU vs CPU ~6h）
+
+#### Inter-Model Correlations (v4)
+
+| 模型对 | v3 | v4 |
+|--------|----|----|
+| LGB-XGB | 0.9652 | 0.9652 |
+| LGB-CB | 0.9330 | 0.9661 |
+| XGB-CB | 0.9109 | 0.9615 |
+
+#### Ensemble v4 结果
+
+- 最优权重: LGB=0.35, XGB=0.65, **CB=0.00**
+- **Ensemble v4 OOF: 0.6408**（与 v3 持平，CB 无贡献）
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| Optuna 调参大幅提升 CB | OOF 0.5728 → 0.6175（+0.0447），GPU 仅 33.7 min |
+| CB 仍无法贡献 ensemble | OOF 低于 LGB/XGB 0.015+，且调参后与 LGB/XGB 相关性反而升高（0.93→0.97），多样性降低 |
+| 所有 fold 跑满 8000 轮 | loss 仍在缓慢下降，但边际收益极小 |
+| Step 5 (Stacking) 放弃 | CB 权重为 0，meta-learner 只能利用 LGB+XGB 两路信号，等价于加权平均，无额外收益 |
+
+### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `notebooks/05_improvement.ipynb` | 提分 notebook（42 cells，含 Step 4b） |
+| `scripts/step4b_gpu.py` | GPU 服务器独立运行脚本（含 fold checkpoint） |
+| `docs/plan/improvement_plan.md` | 7 步提分计划（含 Step 4b GPU 方案） |
+| `models/[lgb\|xgb]_[oof\|test]_v2.npy` | v2 预测文件 |
+| `models/[lgb\|xgb\|cb]_[oof\|test]_v3.npy` | v3 预测文件 |
+| `models/cb_[oof\|test]_v4.npy` | CB v4 预测文件 |
+| `models/cb_v4_fold{0-4}_[oof\|test].npy` | fold checkpoint 文件 |
+| `submissions/ensemble_v2_raw.csv` | v2 提交（平台 0.5338） |
+| `submissions/ensemble_v3.csv` | v3 提交（待提交平台） |
+| `submissions/ensemble_v4.csv` | v4 提交（OOF 0.6408，待提交平台） |
+
+### 完整进度汇总
+
+| 模型 | v1 OOF | v2 OOF | v3 OOF | v4 OOF |
+|------|--------|--------|--------|--------|
+| LightGBM | 0.5815 | 0.5959 | **0.6322** | 0.6322 |
+| XGBoost | 0.5870 | 0.5994 | **0.6379** | 0.6379 |
+| CatBoost | — | — | 0.5728 | **0.6175** |
+| **Ensemble** | 0.5880 | 0.6012 | **0.6408** | **0.6408** |
+| Platform | 0.5222 | 0.5338 | 待提交 | 待提交 |
+
 ### 待完成
 
-- [ ] 提交 ensemble_v3.csv 到平台
-- [ ] Step 5: Stacking 元学习器（视 v3 平台分数决定）
-- [ ] Step 7: Tier 3 特征工程（视时间决定）
-- [ ] 仅用 LGB+XGB 的 v3 提交（CatBoost 无贡献，可省略）
+- [ ] 提交 ensemble_v3.csv 或 ensemble_v4.csv 到平台（两者 OOF 相同，任选其一）
+- [ ] Step 7: Tier 3 特征工程 — Grid×DOW TE（预期 OOF +0.003~0.008）
+- [x] ~~Step 5: Stacking 元学习器~~ — 已放弃（CB 权重为 0，无收益）
 
 ---
 

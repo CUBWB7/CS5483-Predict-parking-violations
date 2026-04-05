@@ -223,9 +223,9 @@ Skip: KMeans clustering (742 grids already sufficient), 6-hour weather window (r
 |-------|-------|-----------|------------------------------|
 | 1 ✅ | Step 1 (TE improvement) + Step 2 (more rounds) + Step 6 (rank normalization) | 2 hours | ~0.545-0.555 |
 | 2 ✅ | Step 3 (Optuna LGB+XGB) + Step 4 (CatBoost untuned) | 2-3 hours + 6.3h | Ensemble OOF 0.6408 |
-| **3 🔄** | **Step 4b (CatBoost Optuna tuning + retrain + ensemble v4)** | **5-7 hours machine time** | **Ensemble OOF 0.643-0.650** |
-| 4 | Step 5 (Stacking) | 30 min | ~0.570-0.585 |
-| 5 | Step 7 (Tier 3 features) — if time permits | 1 hour | ~0.575-0.595 |
+| 3 ✅ | Step 4b (CatBoost Optuna tuning + retrain + ensemble v4) | 33.7 min (GPU) | Ensemble OOF 0.6408 (CB weight=0) |
+| ~~4~~ | ~~Step 5 (Stacking)~~ | ~~30 min~~ | ~~Abandoned: CB weight=0, no benefit~~ |
+| **4 ← NEXT** | **Step 7 (Tier 3: Grid×DOW TE)** | **1 hour** | **OOF +0.003~0.008** |
 
 ---
 
