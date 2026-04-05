@@ -1,19 +1,17 @@
-# Score Improvement Plan: Platform 0.5222 → Target 0.59+
+# Score Improvement Plan
 
 ## Context
 
-Current best: OOF Spearman 0.5880, Platform 0.5222. Platform leaderboard top: 0.5992.
-Two directions for improvement:
-1. **Reduce OOF-Platform gap** (currently 0.066) — closing to 0.03 alone reaches ~0.558
-2. **Improve OOF itself** — tuning + more models + new features
+**Current best**: OOF Spearman **0.6408**, Platform **0.5620**. OOF-Platform gap: **0.0788**.
+Platform leaderboard top: 0.5992.
 
-Plan: create a new notebook `05_improvement.ipynb`, without modifying verified 01-04 notebooks.
+All improvement work in `notebooks/05_improvement.ipynb`, without modifying verified 01-04 notebooks.
 
 ---
 
-## Step 1: Improve Target Encoding (Reduce Gap — HIGHEST Priority)
+## Step 1: Improve Target Encoding ✅ (Limited Effect)
 
-**Expected gain: Platform +0.015~0.025 | Time: 30 min**
+**Expected: Platform +0.015~0.025 | Actual: KS stat improved by only 0.001 | Time: 30 min**
 
 Current issue: 5-Fold TE uses 80% data for train encoding, 100% for test, causing distribution shift (KS stat ~0.01).
 
@@ -26,9 +24,9 @@ Key file: `notebooks/02_feature_engineering.ipynb` (reference implementation), n
 
 ---
 
-## Step 2: Increase n_estimators + Lower Learning Rate (Quick OOF Boost)
+## Step 2: Increase n_estimators + Lower Learning Rate ✅ (Main v2 Contributor)
 
-**Expected gain: OOF +0.003~0.008 | Time: extra training time only**
+**Expected: OOF +0.003~0.008 | Actual: OOF +0.012~0.014 | Time: extra training time only**
 
 Current LGB/XGB both hit 3000 rounds without early stopping triggering — models are undertrained.
 
@@ -39,9 +37,9 @@ Changes:
 
 ---
 
-## Step 3: Optuna Hyperparameter Tuning (Improve OOF)
+## Step 3: Optuna Hyperparameter Tuning ✅ (Biggest Contributor)
 
-**Expected gain: OOF +0.010~0.020 | Time: 2-3 hours (mostly machine time)**
+**Expected: OOF +0.010~0.020 | Actual: OOF +0.036 | Time: ~5 hours**
 
 Both models use untuned manual defaults.
 
@@ -77,9 +75,9 @@ After finding optimal params, train final models on full 6M data with 5-Fold CV.
 
 ---
 
-## Step 4: Add CatBoost as Third Model (Improve Ensemble Diversity)
+## Step 4: Add CatBoost as Third Model ✅ (No Ensemble Contribution)
 
-**Expected gain: Ensemble +0.005~0.015 | Time: 45 min**
+**Expected: Ensemble +0.005~0.015 | Actual: CB weight=0, Ensemble unchanged | Time: 6.3h**
 
 LGB-XGB OOF correlation 0.9778, minimal ensemble benefit. CatBoost uses symmetric trees + ordered boosting — architecturally different.
 
@@ -101,9 +99,9 @@ cb_params = {
 
 ---
 
-## Step 4b: CatBoost Optuna Hyperparameter Tuning (NEW — not in original plan)
+## Step 4b: CatBoost Optuna Hyperparameter Tuning ✅ (CB Improved, Ensemble Unchanged)
 
-**Expected gain: CB OOF 0.5728 → 0.62+, Ensemble +0.002~0.008 | Time: 5-7 hours (machine time)**
+**Expected: CB OOF 0.62+, Ensemble +0.002~0.005 | Actual: CB 0.6175, CB weight still 0 | Time: 33.7 min (GPU)**
 
 CatBoost v3 used untuned defaults (depth=6, lr=0.05, l2_leaf_reg=3.0) and scored OOF 0.5728 — far below tuned LGB (0.6322) and XGB (0.6379). It received 0 weight in the ensemble. Optuna tuning should close this gap.
 
@@ -179,117 +177,127 @@ Estimated time: **~200-250 min (3.5-4.2h)**.
 
 ---
 
-## Step 5: Stacking Meta-Learner (Replace Simple Weighting)
+## Step 5: Stacking Meta-Learner ❌ Abandoned
 
-**Expected gain: +0.005~0.010 | Time: 30 min**
+**Expected: +0.005~0.010 | Actual: Not executed**
 
-Use LGB + XGB + CatBoost OOF predictions as features for a Ridge regression meta-learner.
-Optionally add `total_count`, `grid_te` and other top features for conditional weighting.
+Original plan: use LGB + XGB + CatBoost OOF predictions as features for a Ridge regression meta-learner.
 
----
-
-## Step 6: Rank Normalization Post-Processing (Free Improvement)
-
-**Expected gain: +0.002~0.005 | Time: 10 min**
-
-Spearman only cares about ranking, not absolute values. Apply rank normalization to final predictions:
-
-```python
-from scipy.stats import rankdata
-test_ranks = rankdata(ensemble_test) / len(ensemble_test)
-train_sorted = np.sort(y_train.values)
-normalized = np.interp(test_ranks, np.linspace(0, 1, len(train_sorted)), train_sorted)
-```
-
-Monotonic transform — cannot hurt Spearman, can only help.
+**Why abandoned:**
+- CB weight = 0 in ensemble → meta-learner only has LGB + XGB (2 inputs)
+- LGB-XGB correlation = 0.964 → Ridge on 2 near-identical signals ≈ weighted average
+- Even adding auxiliary features (total_count, grid_te) won't help: base models already consumed them
+- Risk of overfitting OOF noise → could widen the already large OOF-Platform gap (0.079)
 
 ---
 
-## Step 7: Tier 3 Feature Engineering — Grid×Month TE (REVISED)
+## Step 6: Rank Normalization Post-Processing ❌ Harmful
 
-**Expected gain: OOF +0.003~0.008 | Time: ~3.5 hours (15 min coding + 190 min training)**
+**Expected: +0.002~0.005 | Actual: Platform -0.007 (0.5266 vs 0.5338)**
 
-### Data-Driven Feature Selection
+Rank normalization was tested in v2. Despite being theoretically monotonic, it **hurt** platform score.
+Root cause: Spearman(before, after) = 0.988 ≠ 1.0 — floating-point ties introduced noise.
 
-Compared 4 candidate cross-TE features to find the highest-ROI option:
+---
+
+## Step 7: Tier 3 Feature Engineering ❌ No Improvement
+
+**Expected: OOF +0.003~0.008 | Actual: OOF +0.0001 (flat) | Time: ~3.5 hours**
+
+### Feature Selection (Data-Driven)
+
+Compared 4 candidate cross-TE features:
 
 | Feature | Spearman (leaky) | Corr w/ grid_te | Corr w/ grid_period_te | Verdict |
 |---------|------------------|-----------------|-----------------------|---------|
 | grid_period_te (existing) | 0.311 | 0.9801 | — | Baseline |
-| **grid_dow_te (original plan)** | 0.309 | **0.9933** | 0.9717 | **REJECTED: near-redundant** |
-| **grid_month_te (REVISED)** | **0.326** | **0.9456** | 0.9255 | **SELECTED: most unique info** |
+| grid_dow_te (original plan) | 0.309 | 0.9933 | 0.9717 | Rejected: near-redundant |
+| **grid_month_te (selected)** | **0.326** | **0.9456** | 0.9255 | Best candidate |
 | grid_hour_te | 0.315 | 0.9753 | 0.9863 | Rejected: overlaps grid_period_te |
 
-**Why grid_month_te wins:**
-- Lowest correlation with existing TE features → adds most new information
-- month_of_year is 2nd strongest raw feature (ρ=-0.091)
-- Different grids have different seasonal violation patterns (enforcement schedules, weather, traffic)
-- 6,561 unique groups, avg 926 samples/group, 114 unseen test values (0.022%)
+### Result: grid_month_te Failed
 
-**Why grid_dow_te was dropped:**
-- 0.9933 correlation with grid_te — day-of-week variation within grids is negligible
-- The model already captures DOW effects via dow_sin/cos features
+| Metric | Value | Issue |
+|--------|-------|-------|
+| KS stat (train/test shift) | **0.123** | Far above 0.02 target — 26.4% of groups have <50 samples |
+| LGB v5 OOF | 0.6315 | **-0.0007** vs v3 (noise from unstable TE) |
+| XGB v5 OOF | 0.6382 | +0.0003 (within random variation) |
+| Ensemble v5 OOF | 0.6408 | +0.0001 (flat) |
 
-### Implementation
+**Root cause**: fine-grained cross-TE features (6,561 groups) have too many small groups for stable encoding. All 4 candidates have >0.94 correlation with existing TE features — the feature space is saturated.
 
-1. Compute `grid_month = grid_id * 100 + month_of_year` (multiplier 100 for month 1-12)
-2. K-Fold TE: `kfold_target_encode_v2(col='grid_month', n_splits=10, smooth=200)`
-   - smooth=200 (higher than grid_period_te's 150, because 26.4% of groups have <50 samples)
-3. Fallback for 114 unseen test values: use grid_te
-4. Validation gate: proceed only if Spearman > 0.25 and corr with grid_te < 0.96
+### All Tier 3 Candidates Exhausted
 
-### Model Retraining
-
-- LGB v5 + XGB v5: reuse Optuna v3 params, 27 features, 10000 rounds, ES=150
-- CatBoost: skip retraining (weight=0 in ensemble, needs GPU server)
-- Ensemble v5: 3-model weight grid search (CB uses v4 predictions unchanged)
-
-### Skip (Low ROI)
-
-- ~~Grid × Day-of-Week TE~~: corr 0.9933 with grid_te, near-redundant
-- ~~Temperature discretization~~: weather features ρ < 0.03, discretization won't help
+- ~~Grid × Month TE~~: tested, KS=0.123, no gain
+- ~~Grid × Day-of-Week TE~~: corr 0.9933 with grid_te, would be even worse
+- ~~Grid × Hour TE~~: corr 0.9863 with grid_period_te, redundant
+- ~~Temperature discretization~~: weather features ρ < 0.03, won't help
 - ~~KMeans clustering~~: 742 grids already sufficient
 - ~~6-hour weather window~~: high complexity, low expected gain
 
 ---
 
-## Execution Order
+## Execution Order (Final)
 
-| Order | Steps | Est. Time | Cumulative Expected Platform |
-|-------|-------|-----------|------------------------------|
-| 1 ✅ | Step 1 (TE improvement) + Step 2 (more rounds) + Step 6 (rank normalization) | 2 hours | ~0.545-0.555 |
-| 2 ✅ | Step 3 (Optuna LGB+XGB) + Step 4 (CatBoost untuned) | 2-3 hours + 6.3h | Ensemble OOF 0.6408 |
-| 3 ✅ | Step 4b (CatBoost Optuna tuning + retrain + ensemble v4) | 33.7 min (GPU) | Ensemble OOF 0.6408 (CB weight=0) |
-| ~~4~~ | ~~Step 5 (Stacking)~~ | ~~30 min~~ | ~~Abandoned: CB weight=0, no benefit~~ |
-| **4 ← NEXT** | **Step 7 (Tier 3: Grid×Month TE)** | **~3.5h (15 min code + 190 min train)** | **OOF +0.003~0.008** |
+| Order | Steps | Time | Result |
+|-------|-------|------|--------|
+| 1 ✅ | Step 1 (TE) + Step 2 (more rounds) + Step 6 (rank norm) | 2h | Platform 0.5338, rank norm harmful |
+| 2 ✅ | Step 3 (Optuna) + Step 4 (CatBoost) | ~11h | **Ensemble OOF 0.6408, Platform 0.5620** |
+| 3 ✅ | Step 4b (CB Optuna, GPU) | 34 min | CB 0.6175, still weight=0 |
+| 4 ❌ | Step 5 (Stacking) | — | Abandoned |
+| 5 ❌ | Step 7 (Grid×Month TE) | 3.5h | No improvement (KS=0.123) |
+| — ❌ | Step 6 (Rank Norm) | 10 min | Harmful (-0.007) |
+
+**Net result**: Steps 1-3 drove all gains. Steps 4-7 yielded nothing additional.
 
 ---
 
-## Implementation
+## Retrospective & Bottleneck Analysis
 
-All work in **`notebooks/05_improvement.ipynb`**, pipeline:
-1. Load raw data + tier2 parquet
-2. Regenerate improved TE (10-fold, high smoothing, KDTree fallback)
-3. ~~Stacking meta-learner~~ — Abandoned (CB weight=0, no benefit)
-4. ~~Rank normalization~~ — Abandoned (hurts platform score)
-5. Add Tier 3 features: **grid_month_te** (Step 7)
-6. Optuna subsample tuning (Step 3, completed)
-7. Full-data train LGB + XGB (Optuna-tuned params, 10000 rounds)
-8. CatBoost (Optuna-tuned, GPU, completed)
-9. Ensemble weight grid search → submission files
+### What worked
+| Step | OOF Gain | Key insight |
+|------|----------|-------------|
+| Step 2 (more rounds) | +0.013 | Models were severely undertrained at 3000 rounds |
+| Step 3 (Optuna) | +0.036 | By far the largest gain; default params were far from optimal |
 
-Key files:
+### What didn't work and why
+| Step | Why it failed |
+|------|---------------|
+| Step 1 (TE improvement) | TE shift root cause is grid granularity, not fold count |
+| Step 4/4b (CatBoost) | OOF 0.015+ below LGB/XGB; tuning raised corr to 0.97 (lost diversity) |
+| Step 5 (Stacking) | Only 2 useful base models with corr 0.964 → equivalent to averaging |
+| Step 6 (Rank Norm) | Floating-point ties break monotonicity assumption |
+| Step 7 (Tier 3 TE) | All cross-TE features >0.94 corr with existing; feature space saturated |
+
+### The core bottleneck: OOF-Platform gap (0.079)
+
+The gap accounts for ~0.08 Spearman — closing it to 0.04 would reach Platform **0.60+**.
+The gap likely comes from:
+1. **Target Encoding distribution shift** — TE features (grid_te, grid_period_te) are the strongest features but have inherent train/test mismatch
+2. **Possible temporal shift** — train/test may cover different time periods with different violation patterns
+3. **Overfitting to training distribution** — 10000 rounds of GBDT on 6M rows may memorize training-specific patterns
+
+### Potential new directions (not yet attempted)
+
+| Idea | Expected Gain | Effort | Rationale |
+|------|---------------|--------|-----------|
+| **A. Reduce n_estimators for LGB** | Platform +0.005~0.015 | 2h | LGB never triggers ES at 10000; may be overfitting. Try 6000-8000 rounds to reduce gap |
+| **B. Stronger regularization** | Platform +0.003~0.010 | 3h | Re-Optuna with tighter reg_lambda/alpha ranges, lower num_leaves |
+| **C. Drop weak features** | OOF +0.001~0.003 | 1h | Remove is_raining, has_snow, periodic encodings (ablation showed some hurt) |
+| **D. TE with leave-one-out** | Gap -0.01~0.02 | 2h | LOO encoding instead of K-Fold may reduce train/test TE shift |
+| **E. Neural network (TabNet/FT-Transformer)** | OOF +0.005~0.020 | 4h+ | Architecturally different from GBDT → better ensemble diversity. Needs GPU |
+| **F. LGB with dart boosting** | OOF +0.002~0.008 | 3h | DART (dropout trees) reduces overfitting, may close gap |
+
+---
+
+## Key Files
+
+- `notebooks/05_improvement.ipynb` — all improvement code (54 cells)
 - `notebooks/02_feature_engineering.ipynb` — reference TE implementation
-- `notebooks/03_modeling.ipynb` — reference model training pipeline
 - `data/train_features_tier2.parquet` / `test_features_tier2.parquet` — base feature data
-- `data/encoding_maps_tier2.pkl` — encoding maps
+- `models/` — all OOF and test prediction .npy files (v1–v5)
+- `submissions/` — all submission CSV files
 
----
+## Current Best Submission
 
-## Verification
-
-1. After each improvement, compute OOF Spearman and compare to baseline 0.5880
-2. Check TE distribution shift: `scipy.stats.ks_2samp(train_te, test_te)`, target KS stat < 0.005
-3. Check inter-model correlation, target < 0.97 (current LGB-XGB is 0.9778)
-4. Submit to platform for actual score validation
-5. Confirm test predictions have no NaN, row count = 2,028,750
+**`submissions/ensemble_v3.csv`** — Platform **0.5620** (OOF 0.6408)
