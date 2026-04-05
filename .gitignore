@@ -25,6 +25,7 @@ build/
 
 # Claude Code（私有配置）
 .claude/
+CLAUDE.md
 
 # 研究资料和课程背景（不需要入 Git）
 background/

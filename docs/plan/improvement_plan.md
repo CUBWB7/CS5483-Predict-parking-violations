@@ -101,6 +101,84 @@ cb_params = {
 
 ---
 
+## Step 4b: CatBoost Optuna Hyperparameter Tuning (NEW — not in original plan)
+
+**Expected gain: CB OOF 0.5728 → 0.62+, Ensemble +0.002~0.008 | Time: 5-7 hours (machine time)**
+
+CatBoost v3 used untuned defaults (depth=6, lr=0.05, l2_leaf_reg=3.0) and scored OOF 0.5728 — far below tuned LGB (0.6322) and XGB (0.6379). It received 0 weight in the ensemble. Optuna tuning should close this gap.
+
+### Core Challenge: Native Categorical Features are Extremely Slow
+
+CatBoost v3 with `grid_id` (742 categories) + `grid_period` (~3114 categories) as native categoricals took 378 min (6.3h) for 5-fold × 8000 iterations. The ordered target statistics computation scales superlinearly with category count.
+
+**Key Decision: Drop `grid_period` from native categoricals, keep only `grid_id`.**
+- `grid_period` (~3114 values) causes ~60% of categorical compute overhead
+- `grid_period_te` (K-Fold target encoding) is already in the 26 base features
+- Estimated speedup: ~2.5x
+- Full retrain also uses grid_id only for consistency with Optuna configuration
+
+### Phase 1: Optuna Tuning (40 trials)
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| Subsample | 500K rows | CatBoost slower than LGB/XGB, so half of the 1M used for LGB/XGB. Covers 602/742 grid_id (81%) |
+| CV | 3-Fold | Same as LGB/XGB Optuna |
+| Max iterations | 2000 | CatBoost ~3-4x slower per iteration than XGB |
+| Early stopping | 50 rounds | Kill bad configs early |
+| Trials | 40 | TPE converges in 30-40 trials |
+| Pruning | None | CatBoost 1.2.7 callback bug prevents Optuna pruning |
+| Metric | Spearman (manual) | Same as LGB/XGB |
+
+Features: 26 base FEATURES + `grid_id` = 27 features, `grid_id` as sole native categorical.
+
+Search space:
+```
+depth: [4, 10]                    # symmetric tree depth
+learning_rate: [0.01, 0.1] log   # same range as LGB/XGB
+l2_leaf_reg: [1.0, 10.0] log     # L2 regularization
+random_strength: [0.1, 10.0] log # CatBoost-specific: split score perturbation
+bagging_temperature: [0.0, 1.0]  # CatBoost-specific: Bayesian bootstrap
+border_count: [32, 255]          # numeric feature split candidates
+min_data_in_leaf: [1, 100]       # minimum leaf samples
+```
+
+Not tuned: `one_hot_max_size` (742 categories too large), `grow_policy` (keep Symmetric for diversity), `boosting_type` (keep Ordered).
+
+Estimated time: **~110 min (1.8h)**, worst case ~170 min (2.8h).
+
+### Phase 2: Full Retrain
+
+Optuna best params → full 6M data, 5-Fold CV, 10000 iterations, early_stopping=150.
+Same 27 features (grid_id only as native categorical).
+
+Estimated time: **~200-250 min (3.5-4.2h)**.
+
+### Phase 3: Rebuild Ensemble v4
+
+- Recompute inter-model correlations with new CB v4 OOF
+- 3-model weight grid search (step 0.05)
+- Generate `submissions/ensemble_v4.csv`
+- Save `models/cb_oof_v4.npy`, `models/cb_test_v4.npy`
+
+### Expected Outcome
+
+| Scenario | CB v4 OOF | Ensemble v4 OOF | vs v3 |
+|----------|-----------|-----------------|-------|
+| Pessimistic | 0.60-0.61 | 0.6415-0.6425 | +0.001~0.002 |
+| **Expected** | **0.62-0.63** | **0.6430-0.6460** | **+0.002~0.005** |
+| Optimistic | 0.63+ | 0.6460-0.6500 | +0.005~0.009 |
+
+### Risk Mitigation
+
+| Risk | Fallback |
+|------|----------|
+| Optuna too slow (>4h) | Reduce to 300K subsample + 30 trials |
+| CB v4 OOF < 0.60 | Try `grow_policy='Lossguide'`; or abandon CB, move to Step 5 |
+| Params don't transfer to full data | Check transfer ratio; refine top-5 params on 1M if needed |
+| Retrain too slow (>8h) | Reduce to 8000 iterations + ES=100 |
+
+---
+
 ## Step 5: Stacking Meta-Learner (Replace Simple Weighting)
 
 **Expected gain: +0.005~0.010 | Time: 30 min**
@@ -143,9 +221,9 @@ Skip: KMeans clustering (742 grids already sufficient), 6-hour weather window (r
 
 | Order | Steps | Est. Time | Cumulative Expected Platform |
 |-------|-------|-----------|------------------------------|
-| 1 | Step 1 (TE improvement) + Step 2 (more rounds) + Step 6 (rank normalization) | 2 hours | ~0.545-0.555 |
-| 2 | Step 3 (Optuna tuning) — can run overnight | 2-3 hours machine time | ~0.555-0.570 |
-| 3 | Step 4 (CatBoost) — prepare while Optuna runs | 45 min | ~0.565-0.580 |
+| 1 ✅ | Step 1 (TE improvement) + Step 2 (more rounds) + Step 6 (rank normalization) | 2 hours | ~0.545-0.555 |
+| 2 ✅ | Step 3 (Optuna LGB+XGB) + Step 4 (CatBoost untuned) | 2-3 hours + 6.3h | Ensemble OOF 0.6408 |
+| **3 🔄** | **Step 4b (CatBoost Optuna tuning + retrain + ensemble v4)** | **5-7 hours machine time** | **Ensemble OOF 0.643-0.650** |
 | 4 | Step 5 (Stacking) | 30 min | ~0.570-0.585 |
 | 5 | Step 7 (Tier 3 features) — if time permits | 1 hour | ~0.575-0.595 |
 
