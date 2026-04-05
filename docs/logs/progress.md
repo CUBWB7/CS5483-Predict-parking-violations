@@ -467,19 +467,60 @@
 
 ### 完整进度汇总
 
-| 模型 | v1 OOF | v2 OOF | v3 OOF | v4 OOF |
-|------|--------|--------|--------|--------|
-| LightGBM | 0.5815 | 0.5959 | **0.6322** | 0.6322 |
-| XGBoost | 0.5870 | 0.5994 | **0.6379** | 0.6379 |
-| CatBoost | — | — | 0.5728 | **0.6175** |
-| **Ensemble** | 0.5880 | 0.6012 | **0.6408** | **0.6408** |
-| Platform | 0.5222 | 0.5338 | **0.5620** | 待提交 |
+| 模型 | v1 OOF | v2 OOF | v3 OOF | v4 OOF | v5 OOF |
+|------|--------|--------|--------|--------|--------|
+| LightGBM | 0.5815 | 0.5959 | **0.6322** | 0.6322 | 0.6315 |
+| XGBoost | 0.5870 | 0.5994 | **0.6379** | 0.6379 | 0.6382 |
+| CatBoost | — | — | 0.5728 | **0.6175** | 0.6175 (reused) |
+| **Ensemble** | 0.5880 | 0.6012 | **0.6408** | **0.6408** | **0.6408** |
+| Platform | 0.5222 | 0.5338 | **0.5620** | 待提交 | 待提交 |
 
 ### 待完成
 
 - [x] 提交 ensemble_v3.csv 到平台 → **0.5620**（OOF-Platform gap: 0.6408 - 0.5620 = 0.0788）
-- [ ] Step 7: Tier 3 特征工程 — Grid×DOW TE（预期 OOF +0.003~0.008）
+- [x] ~~Step 7: Tier 3 特征工程 — Grid×Month TE~~ — 已完成，收益极微（见下节）
 - [x] ~~Step 5: Stacking 元学习器~~ — 已放弃（CB 权重为 0，无收益）
+
+### 第四批：Step 7 — Tier 3 特征工程（Grid×Month TE） ✅
+
+**日期**: 2026-04-05  
+**状态**: 已完成
+
+#### 特征工程
+
+- `grid_month = grid_id * 100 + month_of_year`（6,561 unique groups，avg 926 samples/group）
+- K-Fold TE：10-fold，smooth=200
+- 114 unseen test groups → fallback 使用 `grid_te`（0.022% 行）
+- validation gate 通过：Spearman > 0.25，corr with grid_te < 0.96
+
+#### LGB v5 + XGB v5（27 特征，Optuna v3 参数，10000 轮，ES=150）
+
+| 模型 | v3/v4 OOF | v5 OOF | 变化 |
+|------|----------|--------|------|
+| LightGBM | 0.6322 | 0.6315 | -0.0007 |
+| XGBoost | 0.6379 | 0.6382 | +0.0002 |
+| Ensemble v5 | 0.6408 | **0.6408** | +0.0001 (flat) |
+
+最优权重：LGB=0.35, XGB=0.65, CB=0.00（CB 复用 v4 预测）
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| grid_month_te 收益极微 | Ensemble +0.0001，低于预期 +0.003~0.008 |
+| LGB 略微下降 | -0.0007，新特征可能引入轻微噪声 |
+| XGB 基本持平 | +0.0002，在随机波动范围内 |
+| CB 权重仍为 0 | v5 ensemble 最优权重不含 CB |
+| 特征信息重叠 | grid_month_te 与 grid_te（ρ=0.9456）和 grid_period_te 的季节性信息高度重叠 |
+| 改进空间用尽 | Tier 3 特征工程路径基本关闭，后续重点转向报告/视频 |
+
+#### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `models/lgb_oof_v5.npy` / `lgb_test_v5.npy` | LGB v5 预测 |
+| `models/xgb_oof_v5.npy` / `xgb_test_v5.npy` | XGB v5 预测 |
+| `submissions/ensemble_v5.csv` | v5 提交（OOF 0.6408，待提交平台）|
 
 ---
 

@@ -205,15 +205,51 @@ Monotonic transform — cannot hurt Spearman, can only help.
 
 ---
 
-## Step 7: Tier 3 Feature Engineering (Optional)
+## Step 7: Tier 3 Feature Engineering — Grid×Month TE (REVISED)
 
-**Expected gain: OOF +0.003~0.008 | Time: 1 hour**
+**Expected gain: OOF +0.003~0.008 | Time: ~3.5 hours (15 min coding + 190 min training)**
 
-Only implement highest-ROI features:
-- **Grid × Day-of-Week TE**: `grid_dow = grid_id * 10 + day_of_week`, K-Fold TE with smooth=150
-- **Temperature discretization**: simple 4-bin categorization
+### Data-Driven Feature Selection
 
-Skip: KMeans clustering (742 grids already sufficient), 6-hour weather window (requires temporal ordering, high complexity)
+Compared 4 candidate cross-TE features to find the highest-ROI option:
+
+| Feature | Spearman (leaky) | Corr w/ grid_te | Corr w/ grid_period_te | Verdict |
+|---------|------------------|-----------------|-----------------------|---------|
+| grid_period_te (existing) | 0.311 | 0.9801 | — | Baseline |
+| **grid_dow_te (original plan)** | 0.309 | **0.9933** | 0.9717 | **REJECTED: near-redundant** |
+| **grid_month_te (REVISED)** | **0.326** | **0.9456** | 0.9255 | **SELECTED: most unique info** |
+| grid_hour_te | 0.315 | 0.9753 | 0.9863 | Rejected: overlaps grid_period_te |
+
+**Why grid_month_te wins:**
+- Lowest correlation with existing TE features → adds most new information
+- month_of_year is 2nd strongest raw feature (ρ=-0.091)
+- Different grids have different seasonal violation patterns (enforcement schedules, weather, traffic)
+- 6,561 unique groups, avg 926 samples/group, 114 unseen test values (0.022%)
+
+**Why grid_dow_te was dropped:**
+- 0.9933 correlation with grid_te — day-of-week variation within grids is negligible
+- The model already captures DOW effects via dow_sin/cos features
+
+### Implementation
+
+1. Compute `grid_month = grid_id * 100 + month_of_year` (multiplier 100 for month 1-12)
+2. K-Fold TE: `kfold_target_encode_v2(col='grid_month', n_splits=10, smooth=200)`
+   - smooth=200 (higher than grid_period_te's 150, because 26.4% of groups have <50 samples)
+3. Fallback for 114 unseen test values: use grid_te
+4. Validation gate: proceed only if Spearman > 0.25 and corr with grid_te < 0.96
+
+### Model Retraining
+
+- LGB v5 + XGB v5: reuse Optuna v3 params, 27 features, 10000 rounds, ES=150
+- CatBoost: skip retraining (weight=0 in ensemble, needs GPU server)
+- Ensemble v5: 3-model weight grid search (CB uses v4 predictions unchanged)
+
+### Skip (Low ROI)
+
+- ~~Grid × Day-of-Week TE~~: corr 0.9933 with grid_te, near-redundant
+- ~~Temperature discretization~~: weather features ρ < 0.03, discretization won't help
+- ~~KMeans clustering~~: 742 grids already sufficient
+- ~~6-hour weather window~~: high complexity, low expected gain
 
 ---
 
@@ -225,21 +261,22 @@ Skip: KMeans clustering (742 grids already sufficient), 6-hour weather window (r
 | 2 ✅ | Step 3 (Optuna LGB+XGB) + Step 4 (CatBoost untuned) | 2-3 hours + 6.3h | Ensemble OOF 0.6408 |
 | 3 ✅ | Step 4b (CatBoost Optuna tuning + retrain + ensemble v4) | 33.7 min (GPU) | Ensemble OOF 0.6408 (CB weight=0) |
 | ~~4~~ | ~~Step 5 (Stacking)~~ | ~~30 min~~ | ~~Abandoned: CB weight=0, no benefit~~ |
-| **4 ← NEXT** | **Step 7 (Tier 3: Grid×DOW TE)** | **1 hour** | **OOF +0.003~0.008** |
+| **4 ← NEXT** | **Step 7 (Tier 3: Grid×Month TE)** | **~3.5h (15 min code + 190 min train)** | **OOF +0.003~0.008** |
 
 ---
 
 ## Implementation
 
-Create new notebook **`notebooks/05_improvement.ipynb`**, pipeline:
+All work in **`notebooks/05_improvement.ipynb`**, pipeline:
 1. Load raw data + tier2 parquet
 2. Regenerate improved TE (10-fold, high smoothing, KDTree fallback)
-3. Add Tier 3 features (if doing)
-4. Optuna subsample tuning
-5. Full-data train LGB + XGB + CatBoost (tuned params, 5000+ rounds)
-6. Stacking meta-learner
-7. Rank normalization
-8. Generate submission files
+3. ~~Stacking meta-learner~~ — Abandoned (CB weight=0, no benefit)
+4. ~~Rank normalization~~ — Abandoned (hurts platform score)
+5. Add Tier 3 features: **grid_month_te** (Step 7)
+6. Optuna subsample tuning (Step 3, completed)
+7. Full-data train LGB + XGB (Optuna-tuned params, 10000 rounds)
+8. CatBoost (Optuna-tuned, GPU, completed)
+9. Ensemble weight grid search → submission files
 
 Key files:
 - `notebooks/02_feature_engineering.ipynb` — reference TE implementation
