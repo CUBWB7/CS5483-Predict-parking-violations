@@ -217,14 +217,14 @@ lgb_params_dart = {
     'objective':         'regression',
     'metric':            'l2',
     'boosting_type':     'dart',    # key change from v7 'gbdt'
-    'drop_rate':         0.1,       # drop 10% of trees each round
-    'max_drop':          50,        # cap at 50 trees dropped per round
+    'drop_rate':         0.05,      # drop 5% of trees each round (0.1 was over-regularizing)
+    'max_drop':          30,        # cap at 30 trees dropped per round (was 50)
     'skip_drop':         0.5,       # 50% chance to skip dropout (speedup)
     'bagging_freq':      5,
     'verbose':           -1,
     'n_jobs':            -1,
     'random_state':      SEED,
-    'n_estimators':      5000,      # DART converges faster; no early stopping
+    'n_estimators':      7000,      # more rounds to compensate for dropout loss
 }
 
 # ── LGB v10 (DART) — 5-Fold CV ───────────────────────────────────────────────
@@ -235,8 +235,10 @@ lgb_test_v10  = np.zeros(len(test_df))   # full-data TE predictions
 lgb_test_v10a = np.zeros(len(test_df))   # M1-5 TE predictions (for v10a submission)
 lgb_scores_v10 = []
 
-print(f'\n=== LGB v10 (DART): v7 params + dart + 5000 rounds ({N_FOLDS}-Fold) ===\n')
-print(f'  DART settings: drop_rate=0.1, max_drop=50, skip_drop=0.5')
+print(f'\n=== LGB v10 (DART): v7 params + dart + 7000 rounds ({N_FOLDS}-Fold) ===\n')
+print(f'  DART settings: drop_rate=0.05, max_drop=30, skip_drop=0.5')
+print(f'  NOTE: If rerunning, delete old checkpoints first:')
+print(f'        rm models/lgb_v10_fold*')
 print(f'  No early stopping (DART loss is non-monotonic)\n')
 t0 = time.time()
 
