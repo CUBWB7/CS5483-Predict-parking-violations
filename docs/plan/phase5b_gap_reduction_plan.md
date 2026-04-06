@@ -143,9 +143,9 @@ Weights: LGB=0.35, XGB=0.50, **CB=0.15** (CB first time non-zero — weaker LGB/
 
 ---
 
-### Step 12: Stronger Regularization via Constrained Re-Optuna ← NEXT
+### Step 12: Stronger Regularization via Constrained Re-Optuna ✅ Done (Awaiting Platform)
 
-**Priority: MEDIUM | Time: 2-3h (GPU) | Expected: Platform +0.003~0.010**
+**Priority: MEDIUM | Time: ~2h (GPU actual) | Expected: Platform +0.003~0.010 | OOF actual: -0.010 ⚠️**
 
 **Rationale**: Step 12 is **orthogonal to Step 11** (TE encoding). Step 11 fixes what the model sees at test time; Step 12 fixes how the model learns. They can stack: final submission = best TE × best regularization. No need to wait for v8a platform score.
 
@@ -201,15 +201,30 @@ Weights: LGB=0.35, XGB=0.50, **CB=0.15** (CB first time non-zero — weaker LGB/
 | M1-5 OOF tracks full OOF | Regularization affects both equally — good |
 | Platform > v7 (0.5636) | Gap reduced — regularization helps generalization |
 
+#### Actual Results (2026-04-06)
+
+| Model | v7 OOF | v9 OOF | Delta | best_iter |
+|-------|--------|--------|-------|-----------|
+| LGB v9 | 0.6336 | 0.6273 | -0.0064 | 10000 (limit) |
+| XGB v9 | 0.6403 | 0.6283 | -0.0120 | ~9990 (limit) |
+| Ensemble v9 | 0.6429 | **0.6326** | **-0.0103** | — |
+| M1-5 OOF | 0.6515 | 0.6419 | -0.0096 | — |
+
+Weights: LGB=0.50, XGB=0.50. LGB-XGB correlation: 0.9681.
+
+**Assessment**: OOF drop (-0.010) exceeds expected mild range (< 0.005). Script flagged as "over-regularized". Both models ran to limit (strong regularization → weaker trees → needs more rounds). Platform score TBD — gap must shrink by ≥ 0.013 to break even with v7 (0.5636).
+
+Break-even analysis: gap 0.079 → 0.066 needed for platform ≈ 0.563. For clear win: gap → 0.059 → platform ≈ 0.573.
+
 #### Output Files
 
 | File | Description |
 |------|-------------|
-| `scripts/step12_gpu.py` | Step 12 GPU script |
+| `scripts/step12_gpu.py` | Step 12 GPU script (completed) |
 | `models/lgb_[oof\|test]_v9.npy` | LGB v9 predictions |
 | `models/xgb_[oof\|test]_v9.npy` | XGB v9 predictions |
-| `submissions/ensemble_v9.csv` | v9 with full-data TE |
-| `submissions/ensemble_v9a.csv` | v9 with M1-5 TE |
+| `submissions/ensemble_v9.csv` | v9 with full-data TE — submit 2nd |
+| `submissions/ensemble_v9a.csv` | v9 with M1-5 TE — submit 3rd (pending v8a result) |
 
 ---
 
@@ -234,16 +249,19 @@ Done:
   Step 9 (Feature Pruning) → neutral
   Step 8 revised (6000 cap) → v6b, Platform 0.5618 ❌ No improvement
   Step 10 (Sample Weighting) → v7, Platform 0.5636 ✅ New best
-  Step 11A (M1-5 TE for test) → v8a ✅ trained, ⏳ awaiting platform submission
+  Step 11A (M1-5 TE for test) → v8a ✅ trained, ⏳ awaiting platform
   Step 11B (M1-5 train only) → v8b ✅ trained, ❌ M1-5 OOF -0.006, not recommended
+  Step 12 (Constrained Optuna) → v9 ✅ trained, OOF -0.010 ⚠️, ⏳ awaiting platform
 
-In parallel (independent axes):
-  → Submit v8a to platform (2026-04-07) — determines TE approach
-  → Step 12: Constrained Optuna (can start now) — determines regularization
+Tomorrow (2026-04-07) — Submit in order:
+  1. ensemble_v8a.csv  (TE axis — cleanest test, OOF unchanged)
+  2. ensemble_v9.csv   (regularization axis — full-data TE)
+  3. ensemble_v9a.csv  (combined: regularization + M1-5 TE) — only if daily limit allows
 
-After both complete:
-  → Combine: best TE (v7 or M1-5) × best regularization (v7 or v9 params)
-  → If still < 0.58 → Step 13 (DART)
+After results:
+  → If any score ≥ 0.575 → success, can wrap up modeling
+  → If all < 0.564 → Step 13 (DART) as last resort
+  → Video deadline 2026-04-15 — time pressure increasing
 ```
 
 **Stop criteria**: Platform ≥ 0.59 OR all steps exhausted OR deadline pressure (video 2026-04-15).
@@ -255,8 +273,9 @@ After both complete:
 | Scenario | Platform Score | Gap to Leaderboard Top (0.5992) |
 |----------|---------------|---------------------------------|
 | Current best (v7) | 0.5636 | 0.036 |
-| Step 11 works | **0.575-0.585** | 0.014-0.024 |
-| Steps 11+12 work | **0.585-0.600** | 0.000-0.014 |
+| v8a (Step 11 TE shift) | ~0.575-0.585 | 0.014-0.024 |
+| v9 (Step 12 regularization) | ~0.560-0.575 | 0.017-0.033 |
+| v9a (Steps 11+12 combined) | ~0.570-0.590 | 0.009-0.022 |
 
 ---
 
@@ -275,7 +294,7 @@ After each step:
 
 | File | Purpose |
 |------|---------|
-| `scripts/step12_gpu.py` | Step 12 script (**to create**) |
+| `scripts/step12_gpu.py` | Step 12 script (completed) |
 | `scripts/step11_gpu.py` | Step 11 script (completed) |
 | `scripts/step10_gpu.py` | Step 10 script (completed) |
 | `notebooks/05_improvement.ipynb` | Main improvement notebook |
