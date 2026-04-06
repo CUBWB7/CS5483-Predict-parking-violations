@@ -91,58 +91,55 @@ Used v3 base (10000 rounds, 26 features, Optuna v3 params). Only change: `sample
 
 ---
 
-### Step 11: M1-5 Focused TE + Training ← NEXT
+### Step 11: M1-5 Focused TE + Training ⏳ Awaiting Platform Submission
 
-**Priority: HIGH | Time: ~1h (GPU) | Expected: Platform +0.005~0.020**
+**Priority: HIGH | Time: ~70 min (GPU) | Actual: OOF unchanged (11A) / M1-5 OOF -0.006 (11B) | Platform: pending**
 
 Since test = M1-5 only, and the gap (0.079) persists across all model-quality interventions, the remaining hypothesis is: **TE encoding shift is amplified by M6-12 data** irrelevant to the test set.
 
-Current TE uses ALL 12 months for test encoding. M6-12 violation patterns differ (M1-5 OOF=0.6515 vs M6-12=0.6297), and including them may add noise to test TE values.
-
-**Two variants:**
-
-#### 11A: M1-5 TE for Test Only (Low Risk, ~15 min)
-
-Recompute test `grid_te` and `grid_period_te` using only M1-5 training rows. Training is unchanged (same v7 models, same OOF). Only test predictions use the new TE.
-
-```python
-# Recompute test TE from M1-5 training data only
-train_m1_5 = train_df[train_df['month_of_year'].isin([1, 2, 3, 4, 5])]
-full_stats = train_m1_5.groupby('grid_id')['invalid_ratio'].agg(['mean', 'count'])
-global_mean = train_m1_5['invalid_ratio'].mean()
-smoothed = (full_stats['count'] * full_stats['mean'] + 100 * global_mean) / (full_stats['count'] + 100)
-test_grid_te_m1_5 = test_df['grid_id'].map(smoothed).fillna(global_mean)
-# Same for grid_period_te (smooth=150), fallback to grid_te for unseen
-
-# Replace test TE columns, predict with existing v7 models
-```
-
-Since training is unchanged, OOF stays the same — only platform submission can evaluate.
-
-#### 11B: Train on M1-5 Only (Medium Risk, ~45 min)
-
-Both TE computation and model training restricted to M1-5 (2.47M rows). New K-fold CV on M1-5 data. Risk: 60% data loss may hurt generalization.
-
-```python
-# K-fold TE on M1-5 only (train encoding)
-# Full M1-5 stats for test encoding
-# Retrain LGB v8b + XGB v8b on 2.47M rows
-# Same Optuna v3 params + sample weighting
-```
-
 **Implementation**: `scripts/step11_gpu.py`
 
-**What to watch:**
+#### KS Distribution Diagnostic
 
-| Signal | Interpretation |
-|--------|---------------|
-| KS stat decreases (e.g., 0.010 → 0.005) | M1-5 TE reduces shift — 11A likely helps |
-| KS stat unchanged | TE shift NOT from month mismatch |
-| 11A Platform > 0.5636 | M1-5 TE closer to test reality |
-| 11B M1-5 OOF ≥ 0.640 | M1-5 data sufficient |
-| 11B M1-5 OOF < 0.635 | Data loss hurts too much |
+| Feature | KS stat (orig TE vs M1-5 TE) | Orig mean | M1-5 mean |
+|---------|-------------------------------|-----------|-----------|
+| grid_te | **0.1305** | 0.5017 | 0.5337 |
+| grid_period_te | **0.1330** | 0.4996 | 0.5297 |
 
-**After Step 11:** Submit both variants. If Platform ≥ 0.575 → done or try Step 12. If both < 0.565 → Step 12.
+KS > 0.13 confirms M1-5 TE differs significantly from full-data TE. M1-5 mean ~0.03 higher (M1-5 months have higher violation rates).
+
+#### 11A: M1-5 TE for Test Only (v8a — Low Risk)
+
+Training identical to v7 (all 6M rows). Only test `grid_te` / `grid_period_te` replaced with M1-5 stats (smooth=100/150).
+
+| Version | LGB OOF | XGB OOF | Ensemble OOF | M1-5 OOF | Platform |
+|---------|---------|---------|--------------|----------|----------|
+| v7 (baseline) | 0.6336 | 0.6403 | 0.6429 | 0.6515 | 0.5636 |
+| **v8a (11A)** | 0.6336 | 0.6403 | **0.6429** | **0.6515** | **pending** |
+
+OOF identical (expected — training unchanged). Weights: LGB=0.35, XGB=0.65, CB=0.00. Runtime: LGB 35min + XGB 10min.
+
+#### 11B: Train on M1-5 Only (v8b — Medium Risk)
+
+Both TE and training restricted to M1-5 (2.47M rows). K-fold TE within M1-5 (smooth=30/50). Test TE from full M1-5 stats.
+
+| Version | LGB M1-5 OOF | XGB M1-5 OOF | Ensemble M1-5 OOF | Platform |
+|---------|-------------|-------------|-------------------|----------|
+| v7 M1-5 | 0.6428 | 0.6482 | 0.6515 | 0.5636 |
+| **v8b (11B)** | 0.6384 (-0.0044) | 0.6417 (-0.0065) | **0.6455 (-0.0060)** | **pending** |
+
+Weights: LGB=0.35, XGB=0.50, **CB=0.15** (CB first time non-zero — weaker LGB/XGB allows CB to contribute). XGB best_iter ~4500 (v7: ~7500), earlier convergence with less data.
+
+#### Interpretation
+
+| Signal from plan | Actual | Interpretation |
+|-----------------|--------|----------------|
+| KS stat decreases? | N/A — different comparison | KS 0.13 measures full vs M1-5 TE gap, not train-test shift |
+| 11A Platform > 0.5636? | **pending** | Only platform can tell if M1-5 TE helps |
+| 11B M1-5 OOF ≥ 0.640? | **0.6455 ✅** | M1-5 data sufficient (above 0.640 threshold) |
+| 11B M1-5 OOF < 0.635? | 0.6455 > 0.635 | Data loss hurts but is tolerable |
+
+**After Step 11:** Submit v8a + v8b to platform (next day — daily limit reached). If Platform ≥ 0.575 → done or try Step 12. If both < 0.565 → Step 12.
 
 ---
 
@@ -184,10 +181,11 @@ Done:
   Step 9 (Feature Pruning) → neutral
   Step 8 revised (6000 cap) → v6b, Platform 0.5618 ❌ No improvement
   Step 10 (Sample Weighting) → v7, Platform 0.5636 ✅ New best
+  Step 11A (M1-5 TE for test) → v8a ✅ trained, ⏳ awaiting platform submission
+  Step 11B (M1-5 train only) → v8b ✅ trained, ⏳ awaiting platform submission
 
-Next (~1h):
-  Step 11A (M1-5 TE for test) → v8a, submit to platform
-  Step 11B (M1-5 train only) → v8b, submit to platform
+Next:
+  Submit v8a + v8b to platform (2026-04-07, daily limit)
 
 If needed (3h):
   Step 12 or 13 → if platform still < 0.58
@@ -222,7 +220,7 @@ After each step:
 
 | File | Purpose |
 |------|---------|
-| `scripts/step11_gpu.py` | Step 11 script (to be created) |
+| `scripts/step11_gpu.py` | Step 11 script (completed) |
 | `scripts/step10_gpu.py` | Step 10 script (completed) |
 | `notebooks/05_improvement.ipynb` | Main improvement notebook |
 | `data/train_features_tier2.parquet` | 26 features + grid_id/grid_period (6.08M rows) |

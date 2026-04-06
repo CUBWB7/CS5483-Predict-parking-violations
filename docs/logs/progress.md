@@ -679,6 +679,86 @@ Ensemble v7 权重：LGB=0.35, XGB=0.65, CB=0.00
 | `models/xgb_[oof\|test]_v7.npy` | XGB v7 预测 |
 | `submissions/ensemble_v7.csv` | v7 提交（**Platform 0.5636，新 best**）|
 
+### Step 11：M1-5 Focused TE + Training → v8a / v8b ⏳ Awaiting Platform
+
+**日期**: 2026-04-06  
+**状态**: 已完成训练，等待平台提交（每日限额已用完，明天提交）
+
+#### 背景
+
+Gap 0.079 在所有 model-quality 干预中持续存在，剩余假设：**TE 编码偏移被 M6-12 数据放大**，因为测试集仅含月份 1-5。
+
+#### KS 分布诊断
+
+| 特征 | KS stat (orig vs M1-5 TE) | p-value |
+|------|--------------------------|---------|
+| grid_te | **0.1305** | 0.0000 |
+| grid_period_te | **0.1330** | 0.0000 |
+
+- KS stat 远高于此前测量的 0.01-0.013（那个是 train OOF TE vs test full-data TE）
+- 说明用全部 12 月计算的 test TE 与用 M1-5 计算的 test TE 差异显著
+- M1-5 TE mean 更高（grid_te: 0.5337 vs 0.5017），反映 M1-5 违规率更高
+
+#### 11A: 全量训练 + M1-5 TE 测试（v8a, Low Risk）
+
+训练完全与 v7 相同（全 6M 行、Optuna v3 参数、log1p 加权），仅将 test set 的 `grid_te` 和 `grid_period_te` 替换为 M1-5 统计量（smooth=100/150）。
+
+| 模型 | v7 OOF | v8a OOF | 变化 | best_iter |
+|------|--------|---------|------|-----------|
+| LGB v8a | 0.6336 | 0.6336 | ±0.0000 | 9997-9999 (ran to limit) |
+| XGB v8a | 0.6403 | 0.6403 | ±0.0000 | 7079-8041 (ES triggered) |
+| Ensemble v8a | 0.6429 | **0.6429** | ±0.0000 | — |
+| M1-5 | 0.6515 | 0.6515 | ±0.0000 | — |
+
+OOF 完全一致（预期：训练数据未变）。权重：LGB=0.35, XGB=0.65, CB=0.00。
+LGB 训练 35.2 min，XGB 训练 10.5 min（GPU）。
+
+#### 11B: M1-5 数据训练 + M1-5 K-fold TE（v8b, Medium Risk）
+
+训练仅用 M1-5 行（2.47M，约 40% 原始数据）。K-fold TE 在 M1-5 内计算（smooth=30/50）。test TE 用 M1-5 全量统计。
+
+| 模型 | v7 M1-5 OOF | v8b M1-5 OOF | 变化 | best_iter |
+|------|-------------|-------------|------|-----------|
+| LGB v8b | 0.6428 | 0.6384 | **-0.0044** | 9987-10000 (ran to limit) |
+| XGB v8b | 0.6482 | 0.6417 | **-0.0065** | 4354-4660 (ES ~4500) |
+| Ensemble v8b | 0.6515 | **0.6455** | **-0.0060** | — |
+
+Ensemble v8b 权重：LGB=0.35, XGB=0.50, **CB=0.15**（CB 首次获得非零权重）。
+LGB 训练 19.9 min，XGB 训练 3.6 min（GPU）。
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| KS stat 0.13 表明 TE 差异显著 | M1-5 TE 与全量 TE 均值差 ~0.03，有可能缩短 gap |
+| 11A OOF 完全不变 | 符合预期——训练未变，仅 test TE 不同，只有平台得分能评估效果 |
+| 11B M1-5 OOF 下降 0.006 | 60% 数据损失确实伤害模型，OOF 从 0.6515 降至 0.6455 |
+| XGB v8b 提前停止 ~4500 轮 | 数据量减少→更快收敛（v7: ~7500, v8b: ~4500） |
+| CB 首次获非零权重 | v8b 中 LGB/XGB 较弱，CB v4（全量训练）提供互补信号 |
+| 平台得分待观察 | v8a 是 "低风险高潜力"（test TE 更贴近实际），v8b 是 "OOF 略降但可能 gap 更小" |
+
+#### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/step11_gpu.py` | GPU 服务器脚本（含 KS 诊断 + 11A + 11B） |
+| `models/lgb_[oof\|test]_v8a.npy` | LGB v8a 预测 |
+| `models/xgb_[oof\|test]_v8a.npy` | XGB v8a 预测 |
+| `models/lgb_[oof\|test]_v8b.npy` | LGB v8b 预测 |
+| `models/xgb_[oof\|test]_v8b.npy` | XGB v8b 预测 |
+| `submissions/ensemble_v8a.csv` | v8a 提交（待提交平台） |
+| `submissions/ensemble_v8b.csv` | v8b 提交（待提交平台） |
+
+### 完整进度汇总（更新至 Step 11）
+
+| 模型 | v1 OOF | v2 OOF | v3 OOF | v7 OOF | v8a OOF | v8b M1-5 OOF |
+|------|--------|--------|--------|--------|---------|-------------|
+| LightGBM | 0.5815 | 0.5959 | 0.6322 | 0.6336 | 0.6336 | 0.6384 |
+| XGBoost | 0.5870 | 0.5994 | 0.6379 | **0.6403** | 0.6403 | 0.6417 |
+| CatBoost | — | — | 0.5728 | 0.6175 | 0.6175 | 0.6175 |
+| **Ensemble** | 0.5880 | 0.6012 | 0.6408 | **0.6429** | **0.6429** | 0.6455 (M1-5) |
+| Platform | 0.5222 | 0.5338 | 0.5620 | **0.5636** | ⏳ pending | ⏳ pending |
+
 ---
 
 ## Phase 6 — 报告
