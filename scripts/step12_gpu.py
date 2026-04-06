@@ -83,39 +83,33 @@ print(f'  Train: {train_df.shape},  Test: {test_df.shape}')
 print(f'  Features (26): {len(FEATURES)}')
 print(f'  M1-5 rows: {m1_5_mask.sum():,}  |  M6-12 rows: {(~m1_5_mask).sum():,}')
 
-# ── Load v7 / CB-v4 baselines ─────────────────────────────────────────────────
-print('\nLoading v7 / CB-v4 baseline predictions...')
+# ── Load v7 baselines ─────────────────────────────────────────────────────────
+# CB v4 files are unavailable (session interruption wiped them, no fold checkpoints).
+# CB weight was 0 in v7 ensemble anyway, so this has no effect on ensemble quality.
+print('\nLoading v7 baseline predictions...')
 lgb_oof_v7  = np.load(f'{MODEL_DIR}lgb_oof_v7.npy')
 xgb_oof_v7  = np.load(f'{MODEL_DIR}xgb_oof_v7.npy')
 lgb_test_v7 = np.load(f'{MODEL_DIR}lgb_test_v7.npy')
 xgb_test_v7 = np.load(f'{MODEL_DIR}xgb_test_v7.npy')
-cb_oof_v4   = np.load(f'{MODEL_DIR}cb_oof_v4.npy')
-cb_test_v4  = np.load(f'{MODEL_DIR}cb_test_v4.npy')
 
 lgb_oof_v7_rho = spearmanr(y, lgb_oof_v7)[0]
 xgb_oof_v7_rho = spearmanr(y, xgb_oof_v7)[0]
-cb_oof_v4_rho  = spearmanr(y, cb_oof_v4)[0]
 
-# Reproduce v7 ensemble weights
+# v7 ensemble = LGB 0.35 + XGB 0.65 (CB weight was 0, so 2-model is identical)
 best_rho_v7 = 0.0
-best_w_v7   = (0.0, 1.0, 0.0)
+best_w_lgb_v7 = 0.35
 for w1 in np.arange(0, 1.01, 0.05):
-    for w2 in np.arange(0, 1.01 - w1, 0.05):
-        w3 = round(1.0 - w1 - w2, 2)
-        rho = spearmanr(y, w1*lgb_oof_v7 + w2*xgb_oof_v7 + w3*cb_oof_v4)[0]
-        if rho > best_rho_v7:
-            best_rho_v7 = rho
-            best_w_v7   = (round(w1,2), round(w2,2), round(w3,2))
+    rho = spearmanr(y, w1*lgb_oof_v7 + (1-w1)*xgb_oof_v7)[0]
+    if rho > best_rho_v7:
+        best_rho_v7   = rho
+        best_w_lgb_v7 = round(w1, 2)
 
-ens_v7_oof   = (best_w_v7[0]*lgb_oof_v7
-              + best_w_v7[1]*xgb_oof_v7
-              + best_w_v7[2]*cb_oof_v4)
-ens_v7_m1_5  = spearmanr(y[m1_5_mask], ens_v7_oof[m1_5_mask])[0]
+ens_v7_oof  = best_w_lgb_v7*lgb_oof_v7 + (1-best_w_lgb_v7)*xgb_oof_v7
+ens_v7_m1_5 = spearmanr(y[m1_5_mask], ens_v7_oof[m1_5_mask])[0]
 
 print(f'  LGB v7 OOF:      {lgb_oof_v7_rho:.4f}')
 print(f'  XGB v7 OOF:      {xgb_oof_v7_rho:.4f}')
-print(f'  CB  v4 OOF:      {cb_oof_v4_rho:.4f}')
-print(f'  Ensemble v7 OOF: {best_rho_v7:.4f}  weights={best_w_v7}')
+print(f'  Ensemble v7 OOF: {best_rho_v7:.4f}  (LGB={best_w_lgb_v7}, XGB={1-best_w_lgb_v7})')
 print(f'  Ensemble v7 M1-5:{ens_v7_m1_5:.4f}')
 
 # ── Recompute M1-5 TE for test (same logic as step11_gpu.py) ─────────────────
@@ -478,37 +472,32 @@ print(f'\nSaved: lgb/xgb _oof/test_v9.npy')
 
 # ── Inter-Model Correlations ──────────────────────────────────────────────────
 corr_lgb_xgb_v9 = np.corrcoef(lgb_oof_v9, xgb_oof_v9)[0, 1]
-corr_lgb_cb_v9  = np.corrcoef(lgb_oof_v9, cb_oof_v4)[0, 1]
-corr_xgb_cb_v9  = np.corrcoef(xgb_oof_v9, cb_oof_v4)[0, 1]
 
 print(f'\n=== Inter-Model Correlations (v9) ===')
 print(f'  LGB-XGB: {corr_lgb_xgb_v9:.4f}  (v7: 0.9647)')
-print(f'  LGB-CB:  {corr_lgb_cb_v9:.4f}  (v7: 0.9657)')
-print(f'  XGB-CB:  {corr_xgb_cb_v9:.4f}  (v7: 0.9563)')
 
-# ── Ensemble weight search (v9) ───────────────────────────────────────────────
-best_rho_v9 = 0.0
-best_w_v9   = (0.0, 1.0, 0.0)
+# ── Ensemble weight search (v9, LGB + XGB only) ───────────────────────────────
+best_rho_v9   = 0.0
+best_w_lgb_v9 = 0.0
 for w1 in np.arange(0, 1.01, 0.05):
-    for w2 in np.arange(0, 1.01 - w1, 0.05):
-        w3 = round(1.0 - w1 - w2, 2)
-        rho = spearmanr(y, w1*lgb_oof_v9 + w2*xgb_oof_v9 + w3*cb_oof_v4)[0]
-        if rho > best_rho_v9:
-            best_rho_v9 = rho
-            best_w_v9   = (round(w1,2), round(w2,2), round(w3,2))
+    rho = spearmanr(y, w1*lgb_oof_v9 + (1-w1)*xgb_oof_v9)[0]
+    if rho > best_rho_v9:
+        best_rho_v9   = rho
+        best_w_lgb_v9 = round(w1, 2)
 
-w1_v9, w2_v9, w3_v9 = best_w_v9
-ens_v9_oof   = w1_v9*lgb_oof_v9 + w2_v9*xgb_oof_v9 + w3_v9*cb_oof_v4
-ens_v9_m1_5  = spearmanr(y[m1_5_mask], ens_v9_oof[m1_5_mask])[0]
+w1_v9 = best_w_lgb_v9
+w2_v9 = round(1 - w1_v9, 2)
+ens_v9_oof  = w1_v9*lgb_oof_v9 + w2_v9*xgb_oof_v9
+ens_v9_m1_5 = spearmanr(y[m1_5_mask], ens_v9_oof[m1_5_mask])[0]
 
 # Full-data TE test predictions (ensemble_v9.csv)
-ens_v9_test  = np.clip(w1_v9*lgb_test_v9 + w2_v9*xgb_test_v9 + w3_v9*cb_test_v4, 0, 1)
+ens_v9_test  = np.clip(w1_v9*lgb_test_v9  + w2_v9*xgb_test_v9,  0, 1)
 
 # M1-5 TE test predictions (ensemble_v9a.csv)
-ens_v9a_test = np.clip(w1_v9*lgb_test_v9a + w2_v9*xgb_test_v9a + w3_v9*cb_test_v4, 0, 1)
+ens_v9a_test = np.clip(w1_v9*lgb_test_v9a + w2_v9*xgb_test_v9a, 0, 1)
 
 print(f'\n=== Ensemble v9 Results ===')
-print(f'  Best weights: LGB={w1_v9}, XGB={w2_v9}, CB={w3_v9}')
+print(f'  Best weights: LGB={w1_v9}, XGB={w2_v9} (no CB — files unavailable)')
 print(f'  Ensemble v9 OOF:  {best_rho_v9:.4f}'
       f'  (v7: {best_rho_v7:.4f}, delta: {best_rho_v9 - best_rho_v7:+.4f})')
 print(f'  Ensemble v9 M1-5: {ens_v9_m1_5:.4f}'
@@ -550,13 +539,13 @@ print(f'\n=== Complete Improvement History ===')
 print(f'{"Version":<22s} {"LGB":>8s} {"XGB":>8s} {"CB":>8s} {"Ensemble":>10s} {"M1-5":>8s} {"Platform":>10s}')
 print('-' * 80)
 rows = [
-    ('v1 (baseline)',     '0.5815', '0.5870', '—',                       '0.5880',           '—',                    '0.5222'),
-    ('v2 (Step1+2)',      '0.5959', '0.5994', '—',                       '0.6012',           '—',                    '0.5338'),
-    ('v3 (Optuna)',       '0.6322', '0.6379', f'{cb_oof_v4_rho:.4f}',   '0.6408',           '0.6492',               '0.5620'),
-    ('v7 (weighted)',     f'{lgb_oof_v7_rho:.4f}', f'{xgb_oof_v7_rho:.4f}',
-                          f'{cb_oof_v4_rho:.4f}',  f'{best_rho_v7:.4f}', f'{ens_v7_m1_5:.4f}', '0.5636'),
-    ('v9 (Step12)',       f'{lgb_oof_v9_rho:.4f}', f'{xgb_oof_v9_rho:.4f}',
-                          f'{cb_oof_v4_rho:.4f}',  f'{best_rho_v9:.4f}', f'{ens_v9_m1_5:.4f}', 'submit→'),
+    ('v1 (baseline)', '0.5815', '0.5870', '—',      '0.5880',              '—',                    '0.5222'),
+    ('v2 (Step1+2)',  '0.5959', '0.5994', '—',      '0.6012',              '—',                    '0.5338'),
+    ('v3 (Optuna)',   '0.6322', '0.6379', '0.6175', '0.6408',              '0.6492',               '0.5620'),
+    ('v7 (weighted)', f'{lgb_oof_v7_rho:.4f}', f'{xgb_oof_v7_rho:.4f}',
+                      '—(lost)', f'{best_rho_v7:.4f}', f'{ens_v7_m1_5:.4f}', '0.5636'),
+    ('v9 (Step12)',   f'{lgb_oof_v9_rho:.4f}', f'{xgb_oof_v9_rho:.4f}',
+                      '—',       f'{best_rho_v9:.4f}', f'{ens_v9_m1_5:.4f}', 'submit→'),
 ]
 for r in rows:
     print(f'  {r[0]:<20s} {r[1]:>8s} {r[2]:>8s} {r[3]:>8s} {r[4]:>10s} {r[5]:>8s} {r[6]:>10s}')
