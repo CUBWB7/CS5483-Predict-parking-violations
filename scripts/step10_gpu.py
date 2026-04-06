@@ -332,10 +332,9 @@ print(f'  Ensemble v7 OOF:  {best_rho_v7:.4f}'
 print(f'  Ensemble v7 M1-5: {ens_v7_m1_5_rho:.4f}'
       f'  (v4: {ens_v4_m1_5_rho:.4f}, delta: {ens_v7_m1_5_rho - ens_v4_m1_5_rho:+.4f})')
 
-# Generate submission
-sub_v7 = pd.read_csv(f'{SUBMIT_DIR}ensemble_v3.csv')
-sub_v7['invalid_ratio'] = ensemble_test_v7
-sub_v7.to_csv(f'{SUBMIT_DIR}ensemble_v7.csv', index=False)
+# Generate submission (same format as step4b_gpu.py — no dependency on prior CSV)
+sub_v7 = pd.DataFrame({'invalid_ratio': ensemble_test_v7})
+sub_v7.to_csv(f'{SUBMIT_DIR}ensemble_v7.csv', index=True, index_label='')
 print(f'\nSaved: {SUBMIT_DIR}ensemble_v7.csv')
 
 # Pre-submission validation
