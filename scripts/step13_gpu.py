@@ -81,8 +81,20 @@ lgb_oof_v7  = np.load(f'{MODEL_DIR}lgb_oof_v7.npy')
 xgb_oof_v7  = np.load(f'{MODEL_DIR}xgb_oof_v7.npy')
 lgb_test_v7 = np.load(f'{MODEL_DIR}lgb_test_v7.npy')
 xgb_test_v7 = np.load(f'{MODEL_DIR}xgb_test_v7.npy')
-cb_oof_v4   = np.load(f'{MODEL_DIR}cb_oof_v4.npy')
-cb_test_v4  = np.load(f'{MODEL_DIR}cb_test_v4.npy')
+
+# CB v4 is optional — its ensemble weight has been 0.00 in all prior steps.
+# If missing (server reset / not synced), fall back to zero arrays so the
+# weight search naturally assigns CB weight = 0 and the script continues.
+cb_oof_path = f'{MODEL_DIR}cb_oof_v4.npy'
+cb_test_path = f'{MODEL_DIR}cb_test_v4.npy'
+if os.path.exists(cb_oof_path) and os.path.exists(cb_test_path):
+    cb_oof_v4  = np.load(cb_oof_path)
+    cb_test_v4 = np.load(cb_test_path)
+    print('  Loaded CB v4 predictions.')
+else:
+    cb_oof_v4  = np.zeros(len(train_df))
+    cb_test_v4 = np.zeros(len(test_df))
+    print('  WARNING: cb_oof_v4.npy not found — using zeros (CB weight will be 0).')
 
 # Also load v8a XGB test (M1-5 TE) for ensemble_v10a
 xgb_test_v8a_path = f'{MODEL_DIR}xgb_test_v8a.npy'
@@ -98,7 +110,7 @@ else:
 
 lgb_oof_v7_rho = spearmanr(y, lgb_oof_v7)[0]
 xgb_oof_v7_rho = spearmanr(y, xgb_oof_v7)[0]
-cb_oof_v4_rho  = spearmanr(y, cb_oof_v4)[0]
+cb_oof_v4_rho  = spearmanr(y, cb_oof_v4)[0] if cb_oof_v4.any() else 0.0
 
 # Reproduce v7 ensemble weights for reference
 best_rho_v7 = 0.0
