@@ -737,6 +737,25 @@ LGB 训练 19.9 min，XGB 训练 3.6 min（GPU）。
 | CB 首次获非零权重 | v8b 中 LGB/XGB 较弱，CB v4（全量训练）提供互补信号 |
 | 平台得分待观察 | v8a 是 "低风险高潜力"（test TE 更贴近实际），v8b 是 "OOF 略降但可能 gap 更小" |
 
+#### 评估与建议
+
+**v8a 评估：⏳ 高优先提交**
+- 实现质量优秀，诊断完整
+- KS = 0.13 表明 M1-5 TE 与全量 TE 有实质性差异，test 预测已明显改变
+- OOF 不变符合预期（训练数据未变）
+- 只有平台分数能评估 v8a 是否缩短 gap — **必须尽快提交**
+- 决策阈值：≥ 0.575 = 成功，≈ 0.564 = 持平需其他手段，< 0.560 = 回退 v7
+
+**v8b 评估：❌ 不推荐提交**
+- M1-5 OOF 下降 0.006（0.6515 → 0.6455），未达到计划中 ≥ 0.640 但低于 v7
+- 60% 数据损失超过了季节聚焦的收益
+- CB 首次获非零权重是因为 LGB/XGB 变弱，而非 CB 变强
+
+**Step 12 与 v8a 的关系：独立正交**
+- Step 12 (constrained Optuna) 解决正则化问题，与 TE 编码方式无关
+- 两个维度可叠加：最终提交 = 最佳 TE × 最佳正则化
+- 不需等 v8a 分数即可开始 Step 12
+
 #### 产出文件
 
 | 文件 | 说明 |
@@ -747,7 +766,7 @@ LGB 训练 19.9 min，XGB 训练 3.6 min（GPU）。
 | `models/lgb_[oof\|test]_v8b.npy` | LGB v8b 预测 |
 | `models/xgb_[oof\|test]_v8b.npy` | XGB v8b 预测 |
 | `submissions/ensemble_v8a.csv` | v8a 提交（待提交平台） |
-| `submissions/ensemble_v8b.csv` | v8b 提交（待提交平台） |
+| `submissions/ensemble_v8b.csv` | v8b 提交（不推荐提交） |
 
 ### 完整进度汇总（更新至 Step 11）
 

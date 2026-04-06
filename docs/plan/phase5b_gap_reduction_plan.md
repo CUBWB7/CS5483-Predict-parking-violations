@@ -143,20 +143,73 @@ Weights: LGB=0.35, XGB=0.50, **CB=0.15** (CB first time non-zero — weaker LGB/
 
 ---
 
-### Step 12: Stronger Regularization via Constrained Re-Optuna (If Steps 10-11 Insufficient)
+### Step 12: Stronger Regularization via Constrained Re-Optuna ← NEXT
 
-**Priority: LOW | Time: 3h | Expected: Platform +0.003~0.010**
+**Priority: MEDIUM | Time: 2-3h (GPU) | Expected: Platform +0.003~0.010**
 
-Re-run Optuna with constrained search space favoring regularization:
+**Rationale**: Step 12 is **orthogonal to Step 11** (TE encoding). Step 11 fixes what the model sees at test time; Step 12 fixes how the model learns. They can stack: final submission = best TE × best regularization. No need to wait for v8a platform score.
 
-| Param | Current | New Range | Rationale |
-|-------|---------|-----------|-----------|
-| num_leaves | 100 | [15, 63] | Reduce tree complexity |
-| reg_lambda | 0.452 | [1.0, 20.0] | Increase L2 |
-| reg_alpha | 1.243 | [2.0, 10.0] | Increase L1 |
-| feature_fraction | 0.844 | [0.5, 0.8] | Reduce per-tree features |
+#### Constrained Search Space
 
-30 trials on M1-5 subsample, 3-fold CV, Spearman metric.
+**LGB parameters:**
+
+| Param | Step 3 Range | Step 3 Best (v7) | Step 12 Range | Direction |
+|-------|-------------|-------------------|---------------|-----------|
+| num_leaves | [15, 127] | **100** | **[15, 63]** | ↓ Reduce tree complexity |
+| learning_rate | [0.01, 0.1] | 0.0564 | [0.01, 0.1] | unchanged |
+| min_child_samples | [20, 200] | 69 | [50, 300] | ↑ slightly higher |
+| reg_lambda | [0.1, 10.0] | **0.452** | **[1.0, 20.0]** | ↑↑ stronger L2 |
+| reg_alpha | [0.0, 5.0] | **1.243** | **[2.0, 10.0]** | ↑↑ stronger L1 |
+| feature_fraction | [0.5, 1.0] | **0.844** | **[0.5, 0.8]** | ↓ reduce per-tree features |
+| bagging_fraction | [0.5, 1.0] | 0.972 | [0.5, 0.9] | ↓ slightly lower |
+
+**XGB parameters:**
+
+| Param | Step 3 Best (v7) | Step 12 Range | Direction |
+|-------|-------------------|---------------|-----------|
+| max_depth | **10** | **[4, 8]** | ↓ reduce depth |
+| learning_rate | 0.0362 | [0.01, 0.1] | unchanged |
+| min_child_weight | 11 | [10, 200] | unchanged |
+| reg_lambda | **1.561** | **[2.0, 20.0]** | ↑ stronger L2 |
+| reg_alpha | **1.239** | **[2.0, 10.0]** | ↑ stronger L1 |
+| colsample_bytree | **0.951** | **[0.5, 0.8]** | ↓↓ much lower |
+| subsample | 0.948 | [0.5, 0.9] | ↓ slightly lower |
+
+#### Implementation: `scripts/step12_gpu.py`
+
+1. **Optuna search** (M1-5 subsample 1M rows, 3-fold CV, Spearman metric):
+   - LGB: 40 trials with constrained ranges
+   - XGB: 40 trials with constrained ranges
+   - Est. time: ~1.5h
+2. **Full retrain** (all 6.08M rows, `sample_weight=np.log1p(total_count)`, 10000 rounds, ES=150):
+   - LGB v9: 5-fold CV with best constrained params
+   - XGB v9: 5-fold CV with best constrained params
+   - Est. time: ~1h
+3. **Ensemble weight search** (grid search: LGB_v9 + XGB_v9 + CB_v4, step=0.05)
+4. **Generate 2 submissions** (to decide TE approach after v8a result):
+   - `ensemble_v9.csv` — full-data TE (if v8a fails)
+   - `ensemble_v9a.csv` — M1-5 TE (if v8a succeeds, reuse Step 11 M1-5 TE logic)
+5. **Save** models, OOF predictions, test predictions to `models/`
+
+#### What to Watch
+
+| Signal | Interpretation |
+|--------|---------------|
+| Optuna best params: num_leaves < 63, reg_lambda > 2.0 | Constraints are binding — search found useful regularization |
+| OOF Spearman: 0.638-0.643 | Mild OOF drop is expected and OK (regularization trades train fit for generalization) |
+| OOF Spearman < 0.635 | Over-regularized — constraints too tight, consider relaxing |
+| M1-5 OOF tracks full OOF | Regularization affects both equally — good |
+| Platform > v7 (0.5636) | Gap reduced — regularization helps generalization |
+
+#### Output Files
+
+| File | Description |
+|------|-------------|
+| `scripts/step12_gpu.py` | Step 12 GPU script |
+| `models/lgb_[oof\|test]_v9.npy` | LGB v9 predictions |
+| `models/xgb_[oof\|test]_v9.npy` | XGB v9 predictions |
+| `submissions/ensemble_v9.csv` | v9 with full-data TE |
+| `submissions/ensemble_v9a.csv` | v9 with M1-5 TE |
 
 ---
 
@@ -182,16 +235,18 @@ Done:
   Step 8 revised (6000 cap) → v6b, Platform 0.5618 ❌ No improvement
   Step 10 (Sample Weighting) → v7, Platform 0.5636 ✅ New best
   Step 11A (M1-5 TE for test) → v8a ✅ trained, ⏳ awaiting platform submission
-  Step 11B (M1-5 train only) → v8b ✅ trained, ⏳ awaiting platform submission
+  Step 11B (M1-5 train only) → v8b ✅ trained, ❌ M1-5 OOF -0.006, not recommended
 
-Next:
-  Submit v8a + v8b to platform (2026-04-07, daily limit)
+In parallel (independent axes):
+  → Submit v8a to platform (2026-04-07) — determines TE approach
+  → Step 12: Constrained Optuna (can start now) — determines regularization
 
-If needed (3h):
-  Step 12 or 13 → if platform still < 0.58
+After both complete:
+  → Combine: best TE (v7 or M1-5) × best regularization (v7 or v9 params)
+  → If still < 0.58 → Step 13 (DART)
 ```
 
-**Stop criteria**: Platform ≥ 0.59 OR all steps exhausted.
+**Stop criteria**: Platform ≥ 0.59 OR all steps exhausted OR deadline pressure (video 2026-04-15).
 
 ---
 
@@ -220,6 +275,7 @@ After each step:
 
 | File | Purpose |
 |------|---------|
+| `scripts/step12_gpu.py` | Step 12 script (**to create**) |
 | `scripts/step11_gpu.py` | Step 11 script (completed) |
 | `scripts/step10_gpu.py` | Step 10 script (completed) |
 | `notebooks/05_improvement.ipynb` | Main improvement notebook |
