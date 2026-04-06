@@ -650,4 +650,5 @@ print(f'  3. If both < 0.565 → proceed to Step 12 (constrained re-Optuna)')
 print(f'  4. If either >= 0.575 → done or try Step 13 (DART)')
 
 print(f'\nStep 11 finished at {time.strftime("%Y-%m-%d %H:%M:%S")}')
+sys.stdout = sys.__stdout__   # restore stdout before closing log to avoid flush error
 log_file.close()
