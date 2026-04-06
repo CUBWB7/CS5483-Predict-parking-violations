@@ -1,11 +1,13 @@
 """
-Reconstruct lgb/xgb _oof/test_v7.npy from per-fold checkpoints.
+Reconstruct aggregated prediction files from per-fold checkpoints.
 Run from the project root:
     conda activate parking
     python scripts/recover_v7_preds.py
 
-This is needed when step10_gpu.py finished all folds but crashed
-before saving the aggregated files.
+Recovers:
+  - lgb_oof_v7.npy / lgb_test_v7.npy  (from step10_gpu.py fold checkpoints)
+  - xgb_oof_v7.npy / xgb_test_v7.npy  (from step10_gpu.py fold checkpoints)
+  - cb_oof_v4.npy  / cb_test_v4.npy   (from step4b_gpu.py fold checkpoints)
 """
 
 import numpy as np
@@ -48,11 +50,28 @@ np.save(f'{MODEL_DIR}lgb_oof_v7.npy',  lgb_oof_v7)
 np.save(f'{MODEL_DIR}lgb_test_v7.npy', lgb_test_v7)
 np.save(f'{MODEL_DIR}xgb_oof_v7.npy',  xgb_oof_v7)
 np.save(f'{MODEL_DIR}xgb_test_v7.npy', xgb_test_v7)
-print(f'\nSaved: lgb/xgb _oof/test_v7.npy')
+print('Saved: lgb/xgb _oof/test_v7.npy')
 
-# Also check cb_v4 (needed by step12_gpu.py)
+# ── Recover cb_v4 from step4b_gpu.py fold checkpoints ────────────────────────
 import os
-for f in ['cb_oof_v4.npy', 'cb_test_v4.npy']:
-    path = f'{MODEL_DIR}{f}'
-    status = f'OK  ({os.path.getsize(path)/1e6:.1f} MB)' if os.path.exists(path) else 'MISSING — check step4b_gpu outputs'
-    print(f'  {f}: {status}')
+
+cb_v4_ckpts = [f'{MODEL_DIR}cb_v4_fold{i}_oof.npy' for i in range(N_FOLDS)]
+if all(os.path.exists(p) for p in cb_v4_ckpts):
+    print('\nReconstructing CB v4 from fold checkpoints...')
+    cb_oof_v4  = np.zeros(len(train_df))
+    cb_test_v4 = np.zeros(len(test_df))
+    for fold, (_, va_idx) in enumerate(kf.split(train_df)):
+        cb_oof_v4[va_idx] = np.load(f'{MODEL_DIR}cb_v4_fold{fold}_oof.npy')
+        cb_test_v4       += np.load(f'{MODEL_DIR}cb_v4_fold{fold}_test.npy') / N_FOLDS
+        print(f'  Fold {fold}: done')
+    cb_rho = spearmanr(y, cb_oof_v4)[0]
+    print(f'CB v4 OOF Spearman: {cb_rho:.4f}  (expected ~0.6175)')
+    np.save(f'{MODEL_DIR}cb_oof_v4.npy',  cb_oof_v4)
+    np.save(f'{MODEL_DIR}cb_test_v4.npy', cb_test_v4)
+    print('Saved: cb_oof_v4.npy / cb_test_v4.npy')
+else:
+    missing = [p for p in cb_v4_ckpts if not os.path.exists(p)]
+    print(f'\nCB v4 fold checkpoints missing: {missing}')
+    print('step4b_gpu.py needs to be re-run to generate CB v4 predictions.')
+
+print('\nAll done. Run check_step12_files.py to verify.')
