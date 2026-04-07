@@ -78,7 +78,7 @@ Ensemble v10 weights: LGB=0.10, XGB=0.85, CB=0.05 (DART LGB nearly ignored)
 
 ---
 
-## Step 14: Neural Network (MLP/ResNet) — `scripts/step14_gpu.py`
+## Step 14: Neural Network (MLP/ResNet) — `scripts/step14_gpu.py` ❌ COMPLETED (Negative Result)
 
 ### Rationale
 Reference Vo 2025's 6-layer residual network (same THESi data source). Train a model with fundamentally different prediction patterns from GBDT to increase ensemble diversity. Current LGB-XGB correlation is 0.968 — almost no diversity benefit.
@@ -98,12 +98,6 @@ Input (26 features)
   → Linear(32, 1) → Sigmoid
 ```
 
-**Key Design Decisions**:
-1. **Sigmoid output**: target is [0,1] ratio, Sigmoid naturally constrains range
-2. **Skip connection**: following Vo 2025, residual connection in middle layers
-3. **Decreasing Dropout**: 256→128→64→64→64→32→1, Dropout decreases from 0.3 to 0.1
-4. **BatchNorm at input**: replaces manual feature standardization (more convenient)
-
 ### Training Setup
 
 ```python
@@ -114,46 +108,62 @@ EPOCHS        = 30          # with early stopping
 ES_PATIENCE   = 5           # stop after 5 epochs no improvement
 SCHEDULER     = 'cosine'    # CosineAnnealingLR
 
-# Loss: MSE (consistent with GBDT)
+# Loss: weighted MSE (consistent with GBDT sample_weight=log1p(total_count))
 # Eval metric: Spearman correlation (on validation set)
 ```
 
-### Data Processing
-1. **Feature standardization**: StandardScaler fit on train fold, transform on val/test
-2. **Sample weight**: via WeightedRandomSampler or weighted loss
-3. **DataLoader**: `num_workers=4`, `pin_memory=True`
+### Results (5-Fold, GPU RTX 5880 Ada, 134.5 min total)
 
-### 5-Fold CV Structure
-```python
-for fold, (tr_idx, va_idx) in enumerate(kf.split(X_train)):
-    scaler = StandardScaler()
-    X_tr_scaled = scaler.fit_transform(X_train[tr_idx])
-    X_va_scaled = scaler.transform(X_train[va_idx])
-    X_test_scaled = scaler.transform(X_test)
-    
-    model = ParkingResNet(n_features=26)
-    # ... train loop with early stopping on val Spearman ...
-    
-    nn_oof[va_idx] = predict(model, X_va_scaled)
-    nn_test += predict(model, X_test_scaled) / N_FOLDS
-```
+| Fold | Spearman | best_epoch | ES epoch |
+|------|---------|------------|----------|
+| 0 | 0.4225 | 9 | 14 |
+| 1 | 0.4223 | 4 | 9 |
+| 2 | 0.4219 | 4 | 9 |
+| 3 | 0.4211 | 4 | 9 |
+| 4 | 0.4214 | 6 | 11 |
+| **OOF** | **0.4215** | — | — |
+| **M1-5** | **0.4378** | — | — |
+
+NN training time: 18.7 min. Ensemble grid search: ~116 min (4-model, step=0.05, ~7770 combos × 6M rows).
+
+### Inter-Model Correlations
+
+| Model Pair | Correlation |
+|------------|------------|
+| NN v1 - LGB v7 | 0.7318 |
+| NN v1 - XGB v7 | 0.7009 |
+| NN v1 - Ensemble v7 | **0.7174** (target: < 0.90 ✅) |
+| LGB v7 - XGB v7 | 0.9681 (reference) |
+
+### 4-Model Ensemble v11
+
+| Version | Weights (L/X/C/N) | OOF | M1-5 | vs v7 |
+|---------|-------------------|-----|------|-------|
+| v7 (baseline) | 0.35/0.65/0.00/— | 0.6429 | 0.6515 | — |
+| v11 (full-data TE) | 0.25/0.45/0.30/**0.00** | 0.6429 | 0.6515 | ±0.0000 |
+| v11a (M1-5 TE) | 0.25/0.45/0.30/**0.00** | 0.6429 | 0.6515 | ±0.0000 |
+
+NN weight = 0 in both versions — accuracy too low to contribute.
+
+### Success Criteria Check
+
+| Criterion | Target | Actual | Result |
+|-----------|--------|--------|--------|
+| NN OOF ≥ 0.58 | 0.58 | 0.4215 | ❌ FAIL |
+| NN-Ensemble corr < 0.90 | < 0.90 | 0.7174 | ✅ PASS |
+| 4-model Ensemble OOF > 0.6429 | > 0.6429 | 0.6429 | ❌ FAIL |
+
+### Conclusion
+**Meaningful negative result**: NN achieves excellent diversity (correlation 0.72 vs GBDT 0.97) but accuracy is far too low (0.42 vs 0.64). The model severely underfits — training loss barely decreases after epoch 2-4, suggesting 26 tabular features are insufficient for NN to match GBDT's tree-splitting patterns. Not submitted to platform. Retained as experimental data for report (diversity vs accuracy tradeoff).
 
 ### Output Files
-- `models/nn_oof_v1.npy`, `models/nn_test_v1.npy`
-- Model weights: `models/nn_fold{0-4}.pt`
+- `models/nn_oof_v1.npy`, `models/nn_test_v1.npy`, `models/nn_test_v1a.npy`
+- `submissions/ensemble_v11.csv`, `submissions/ensemble_v11a.csv` (not submitted)
+- `step14_gpu.log` (full training log)
 
-### Version: nn_v1
+### Version: v11 (NN v1 + v7 LGB/XGB ensemble)
 
-### Ensemble Integration
-
-After training NN, run 4-model ensemble weight search:
-```
-LGB_v7 + XGB_v7 + CB_v4 + NN_v1
-```
-
-Even if NN OOF is only 0.60-0.62, low correlation with GBDT (< 0.90) can still boost ensemble.
-
-### Estimated Time: ~2-3h on GPU (including debugging)
+### Actual Time: ~2.2h on GPU (18.7 min NN training + ~116 min grid search)
 
 ---
 

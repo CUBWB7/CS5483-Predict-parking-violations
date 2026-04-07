@@ -922,15 +922,105 @@ Ensemble v10 权重：**LGB=0.10, XGB=0.85, CB=0.05**（DART LGB 权重极低，
 | `submissions/ensemble_v10a.csv` | v10a 提交（不推荐提交平台） |
 | `step13_gpu.log` | 训练日志 |
 
-### 完整进度汇总（更新至 Step 13）
+### Step 14：Neural Network (MLP/ResNet) → v11 ❌ NN 精度不足，无法贡献 Ensemble
 
-| 模型 | v3 OOF | v7 OOF | v8a OOF | v9 OOF | v10 OOF |
-|------|--------|--------|---------|--------|---------|
-| LightGBM | 0.6322 | 0.6336 | 0.6336 | 0.6273 | 0.6147 (DART) |
-| XGBoost | 0.6379 | **0.6403** | 0.6403 | 0.6283 | (reuse v7) |
-| **Ensemble** | 0.6408 | **0.6429** | **0.6429** | 0.6326 | 0.6406 |
-| M1-5 OOF | 0.6492 | **0.6515** | 0.6515 | 0.6419 | 0.6490 |
-| Platform | 0.5620 | **0.5636** | ⏳ pending | ⏳ pending | ❌ not submitted |
+**日期**: 2026-04-07  
+**状态**: 已完成，结论为负面结果（不提交平台）
+
+#### 背景
+
+LGB-XGB 相关性 0.968，ensemble 多样性极低。训练 NN（基于 Vo 2025 的 6 层残差网络）以提供与 GBDT 正交的预测信号，即使 NN 单模精度较低，低相关性也可能提升 ensemble。
+
+#### 模型架构 (ParkingResNet)
+
+```
+Input(26) → BatchNorm → Linear(256) → ReLU → Dropout(0.3)
+→ Linear(128) → ReLU → Dropout(0.3)
+→ Linear(64) → ReLU → Dropout(0.2)
+→ [skip] Linear(64) → ReLU → Dropout(0.2)
+→ Linear(64) → ReLU + skip [/skip]
+→ Linear(32) → ReLU → Dropout(0.1)
+→ Linear(1) → Sigmoid
+```
+
+训练配置：Batch=4096, LR=1e-3, WD=1e-4, MaxEpochs=30, ES patience=5, CosineAnnealingLR, Weighted MSE loss
+
+#### NN v1 训练结果（5-Fold, GPU RTX 5880 Ada, 18.7 min）
+
+| Fold | Spearman | best_epoch | ES epoch |
+|------|---------|------------|----------|
+| 0 | 0.4225 | 9 | 14 |
+| 1 | 0.4223 | 4 | 9 |
+| 2 | 0.4219 | 4 | 9 |
+| 3 | 0.4211 | 4 | 9 |
+| 4 | 0.4214 | 6 | 11 |
+| **OOF** | **0.4215** | — | — |
+| **M1-5** | **0.4378** | — | — |
+
+训练 loss 快速收敛（epoch 2-4 后几乎不下降: 0.0748→0.0740），模型严重 underfitting。
+
+#### Inter-Model Correlations
+
+| 模型对 | 相关性 |
+|--------|--------|
+| NN-LGB | 0.7318 |
+| NN-XGB | 0.7009 |
+| NN-Ensemble v7 | **0.7174** (目标 < 0.90 ✅) |
+
+#### 4-Model Ensemble v11 (LGB_v7 + XGB_v7 + CB_v4 + NN_v1)
+
+| 版本 | 权重 (L/X/C/N) | OOF | M1-5 | vs v7 |
+|------|---------------|-----|------|-------|
+| v7 (baseline) | 0.35/0.65/0.00/— | 0.6429 | 0.6515 | — |
+| v11 (full-data TE) | 0.25/0.45/0.30/**0.00** | 0.6429 | 0.6515 | ±0.0000 |
+| v11a (M1-5 TE) | 0.25/0.45/0.30/**0.00** | 0.6429 | 0.6515 | ±0.0000 |
+
+NN 权重 = 0 — grid search 判定 NN 精度太低，加入反而引入噪声。
+
+#### 成功标准检查
+
+| 标准 | 目标 | 实际 | 结果 |
+|------|------|------|------|
+| NN OOF ≥ 0.58 | 0.58 | 0.4215 | ❌ FAIL |
+| NN-Ens 相关性 < 0.90 | < 0.90 | 0.7174 | ✅ PASS |
+| Ensemble OOF > 0.6429 | > 0.6429 | 0.6429 | ❌ FAIL |
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| NN 多样性优秀 | 与 GBDT 相关性仅 0.70-0.73，远低于 LGB-XGB 的 0.968 |
+| 但精度太低 | OOF 0.42 vs GBDT 0.63-0.64，差距 0.22 |
+| NN 严重 underfitting | 训练 loss 在 epoch 2-4 就停止下降，Early stopping 在 9-14 轮触发 |
+| 26 个特征不适合 NN | GBDT 的树分裂能天然捕获 TE/count 等特征的非线性关系，NN 需要更多特征工程 |
+| Grid search 耗时过长 | 4 模型 step=0.05 → 7770 组合 × 6M 行 Spearman，总运行 134.5 min（NN 训练仅 18.7 min） |
+
+#### 结论
+
+**有意义的负面结果**：NN 达成了多样性目标（相关性 0.72 << 0.90），但准确度远低于 GBDT，无法贡献 ensemble。v11/v11a 不提交平台。此结论可写入报告作为实验对比——展示"多样性 vs 精度"的 tradeoff。
+
+#### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/step14_gpu.py` | GPU 服务器脚本（含 ParkingResNet + fold checkpoint + dual TE submission） |
+| `models/nn_oof_v1.npy` | NN v1 OOF 预测 (6,076,546 rows) |
+| `models/nn_test_v1.npy` | NN v1 test 预测 (full-data TE) |
+| `models/nn_test_v1a.npy` | NN v1 test 预测 (M1-5 TE) |
+| `submissions/ensemble_v11.csv` | v11 提交（不推荐提交平台） |
+| `submissions/ensemble_v11a.csv` | v11a 提交（不推荐提交平台） |
+| `step14_gpu.log` | 训练日志（134.5 min 完整记录） |
+
+### 完整进度汇总（更新至 Step 14）
+
+| 模型 | v3 OOF | v7 OOF | v8a OOF | v9 OOF | v10 OOF | v11 OOF |
+|------|--------|--------|---------|--------|---------|---------|
+| LightGBM | 0.6322 | 0.6336 | 0.6336 | 0.6273 | 0.6147 (DART) | (reuse v7) |
+| XGBoost | 0.6379 | **0.6403** | 0.6403 | 0.6283 | (reuse v7) | (reuse v7) |
+| NN | — | — | — | — | — | 0.4215 |
+| **Ensemble** | 0.6408 | **0.6429** | **0.6429** | 0.6326 | 0.6406 | 0.6429 (NN wt=0) |
+| M1-5 OOF | 0.6492 | **0.6515** | 0.6515 | 0.6419 | 0.6490 | 0.6515 |
+| Platform | 0.5620 | **0.5636** | ⏳ pending | ⏳ pending | ❌ not submitted | ❌ not submitted |
 
 ---
 
