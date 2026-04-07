@@ -16,7 +16,7 @@ Reviewed all 7 project papers + FunSearch/AlphaEvolve. Key findings:
 
 ---
 
-## Step 13: DART Boosting — `scripts/step13_gpu.py`
+## Step 13: DART Boosting — `scripts/step13_gpu.py` ❌ COMPLETED (Negative Result)
 
 ### Rationale
 DART (Dropouts meet Multiple Additive Regression Trees) randomly drops existing trees each boosting round, forcing new trees to learn independently and reducing overfitting. LGB never triggers early stopping at 10000 rounds — DART addresses this directly.
@@ -26,35 +26,55 @@ DART (Dropouts meet Multiple Additive Regression Trees) randomly drops existing 
 **Based on step10_gpu.py template**, only changing LGB's boosting_type:
 
 ```python
-# LGB DART parameters (based on v7 Optuna best params)
+# LGB DART parameters — final tuned version (2nd run)
 lgb_params_dart = {
     **lgb_v7_params,              # reuse v7 Optuna params
     'boosting_type': 'dart',      # core change
-    'drop_rate':     0.1,         # drop 10% of trees each round
-    'max_drop':      50,          # max 50 trees dropped per round
+    'drop_rate':     0.05,        # drop 5% of trees (0.1 was too aggressive)
+    'max_drop':      30,          # max 30 trees dropped per round (was 50)
     'skip_drop':     0.5,         # 50% chance to skip drop (speedup)
-    'n_estimators':  5000,        # DART converges faster, no need for 10000
+    'n_estimators':  7000,        # more rounds to compensate for dropout
     # Note: DART does not support standard early_stopping (loss is non-monotonic)
 }
 ```
 
 **XGB unchanged**: keep v7 GBDT params (XGB DART is less stable).
 
-### Key Decisions
-1. **Only change LGB**, XGB stays v7 → minimize variables for clean comparison
-2. **Fixed 5000 rounds**, no early stopping (DART loss is non-monotonic)
-3. **n_estimators choice**: DART trees contribute more (due to dropout), 5000 is sufficient. Can reduce to 3000 if too slow
-4. **Reuse v7 sample_weight**: `np.log1p(total_count)`
+### Tuning History
+1. **1st run** (drop_rate=0.1, max_drop=50, n_estimators=5000): Fold 0 OOF **0.6054** — far too low, interrupted
+2. **2nd run** (drop_rate=0.05, max_drop=30, n_estimators=7000): 5-Fold OOF **0.6147** — still below target
+
+### Results (2nd run, 5-Fold, GPU, 182 min)
+
+| Metric | v7 | v10 (DART) | Delta |
+|--------|-----|------------|-------|
+| LGB OOF | 0.6336 | 0.6147 | **-0.0190** |
+| LGB M1-5 OOF | 0.6428 | 0.6266 | -0.0162 |
+| LGB-XGB correlation | 0.9681 | **0.9476** | -0.0205 (improved) |
+| Ensemble OOF | 0.6429 | 0.6406 | -0.0023 |
+| Ensemble M1-5 | 0.6515 | 0.6490 | -0.0025 |
+
+Ensemble v10 weights: LGB=0.10, XGB=0.85, CB=0.05 (DART LGB nearly ignored)
+
+### Success Criteria Check
+
+| Criterion | Target | Actual | Result |
+|-----------|--------|--------|--------|
+| DART LGB OOF ≥ 0.625 | 0.625 | 0.6147 | ❌ FAIL |
+| LGB-XGB correlation < 0.965 | < 0.965 | 0.9476 | ✅ PASS |
+| Ensemble OOF ≥ 0.640 | 0.640 | 0.6406 | ✅ PASS (barely) |
+
+### Conclusion
+**Meaningful negative result**: DART achieves diversity goal (correlation 0.968→0.948) but accuracy cost is too high (-0.019). Not submitted to platform. Retained as experimental data for report.
 
 ### Output Files
 - `models/lgb_oof_v10.npy`, `models/lgb_test_v10.npy` (DART LGB)
-- `models/xgb_oof_v10.npy`, `models/xgb_test_v10.npy` (reuse v7 XGB or retrain)
-- `submissions/ensemble_v10.csv` (full-data TE)
-- `submissions/ensemble_v10a.csv` (M1-5 TE)
+- `submissions/ensemble_v10.csv` (full-data TE, not submitted)
+- `submissions/ensemble_v10a.csv` (M1-5 TE, not submitted)
 
 ### Version: v10 (DART LGB + v7 XGB ensemble)
 
-### Estimated Time: ~1.5h on GPU
+### Actual Time: ~3h on GPU (including 1st failed run)
 
 ---
 
