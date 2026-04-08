@@ -1096,6 +1096,64 @@ v7 ensemble 权重（LGB=0.35, XGB=0.65）是在全量 12 月 OOF 上以 step=0.
 | `notebooks/06_sprint.ipynb` Section A | Sprint notebook，带完整输出 |
 | `submissions/ensemble_v12.csv` | v12 提交（v8a test + M1-5 权重，不建议提交平台） |
 
+### Sprint Experiment D — Adversarial Validation + Temporal CV
+
+**日期**: 2026-04-08  
+**Notebook**: `notebooks/06_sprint.ipynb` Section D  
+**目标**: 诊断 train/test 分布偏移，建立更准确的本地评估指标
+
+#### Part 1: Adversarial Validation
+
+训练 LightGBM 二分类器区分 train vs test：
+
+| 变体 | 说明 | 5-Fold AUC |
+|------|------|-----------|
+| V1 | 全量 train vs test | 0.9999 |
+| V2 | M1-5 train vs test | 0.9995 |
+
+- AUC 接近 1.0 → train/test 分布差异**极其显著**
+- V1-V2 gap 仅 0.0003 → 月份差异只占很小比例，主要差异来自其他特征（可能与 target encoding 有关）
+- 所有 fold 500 轮未触发早停 → 分类器轻松达到完美区分
+- AV 概率按月分布：M5=0.0024（最像 test），M6-7≈0.002，M4=0.112，M1-3/M11-12≈0.19
+
+**Top AV 特征**: grid_te, grid_period_te, grid_avg_count（target encoding 特征主导）
+
+#### Part 2: Temporal CV (M1-4 → M5)
+
+| 模型 | Random 5-Fold (v7) | Temporal (M1-4→M5) | Delta |
+|------|--------------------|--------------------|-------|
+| LGB | 0.6336 | 0.5972 | -0.0364 |
+| XGB | 0.6403 | 0.5970 | -0.0433 |
+| Ensemble | 0.6429 | 0.6017 | -0.0412 |
+
+- Temporal CV gap = 0.0412，占 platform gap（0.0793）的约 52%
+- 说明**时间分布偏移是 OOF-platform 差距的主要原因之一**
+
+#### Part 2b: AV-Weighted Temporal CV
+
+| 模型 | 无 AV 权重 | + AV 权重 | Delta |
+|------|-----------|----------|-------|
+| LGB | 0.5972 | 0.5902 | -0.0070 |
+| XGB | 0.5970 | 0.5896 | -0.0074 |
+| Ensemble | 0.6017 | 0.5937 | -0.0080 |
+
+- AV 权重**有害**（-0.0080）
+- 原因：AUC≈1.0 导致 AV 概率接近二值化，权重方案变成了"丢弃大部分训练样本"
+
+#### 结论
+
+1. **Temporal CV (0.6017) 是比 Random CV (0.6429) 更接近 platform 的本地评估指标**
+2. **AV 权重不可行** — 分布差异太大，简单加权无法弥合
+3. 后续实验应以 Temporal CV 作为辅助参考指标
+
+#### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `notebooks/06_sprint.ipynb` Section D | AV + Temporal CV 完整代码和输出 |
+| `figures/av_feature_importance.png` | AV 特征重要性对比图 |
+| `figures/av_probability_distribution.png` | AV 概率分布图 |
+
 ---
 
 ## Phase 6 — 报告
