@@ -1,4 +1,4 @@
-# Sprint Plan: Final 2-3 Day Push
+# Sprint Plan: Final 2-3 Day Push (v2 — Revised)
 
 ## Context
 
@@ -21,9 +21,28 @@
 | v10 | DART Boosting | 0.6406 | not submitted | — | LGB OOF -0.019 |
 | v11 | +NN (weight=0) | 0.6429 | not submitted | — | NN OOF 0.42 |
 
+### Lessons from Steps 8-14
+
+| Attempt | Why it failed | Takeaway |
+|---------|--------------|----------|
+| M1-5 TE (v8a) | Full-data TE is actually better for test | Don't assume temporal TE is better |
+| Strong regularization (v9) | Over-regularized, OOF -0.010 | Gap is NOT caused by overfitting |
+| DART (v10) | Precision loss (-0.019) > diversity gain | Dropout hurts on 6M noisy data |
+| ResNet NN (v11) | OOF 0.42, too weak for ensemble | Simple NN architecture insufficient |
+
+### New Literature Support
+
+6 papers downloaded to `research_parking_violations/papers/AI/`:
+1. Adversarial Validation (Ivanescu 2021) — sample re-weighting for distribution shift
+2. Temporal Shift Limits (2025) — minimizing time lag improves generalization
+3. Differentiable Sorting (Blondel 2020, ICML) — torchsort for Spearman loss
+4. Pseudo-Labeling for Tabular (2023) — curriculum pseudo-labeling for GBDT
+5. GBDT Label Noise (2024) — handling noisy labels in GBDT
+6. TabM (Gorishniy 2024, ICLR 2025) — SOTA tabular deep learning
+
 ---
 
-## Day 1 (4/08) — Submit 2 + Start New Experiments
+## Day 1 (4/08) — Quick Wins + Diagnostics
 
 ### Submission 1: `ensemble_v9.csv` (already generated)
 
@@ -43,22 +62,30 @@ Pure regularization (no M1-5 TE), isolates the regularization effect.
 
 ### Submission 2: `ensemble_v12.csv` (from Experiment A)
 
-### Experiment B: Stacking Meta-Learner (Local/GPU)
+### Experiment D: Adversarial Validation + Temporal CV (Local/GPU, ~30min)
 
-`notebooks/06_sprint.ipynb` — Section B
+`notebooks/06_sprint.ipynb` — Section D
 
-**Rationale**: Simple weighted average assumes linear additivity, but meta-learners (Ridge, LightGBM) can capture non-linear interactions between model predictions. Classic Kaggle stacking technique.
+**Rationale**: Train a classifier to distinguish train vs test data. Samples with high "test-like" probability should receive higher training weight. Additionally, switch CV to Temporal CV (validate on M1-5 only) for more realistic platform score estimation.
+
+**Reference**: Paper 1 (Ivanescu 2021), Paper 2 (Temporal Shift 2025)
 
 **Implementation**:
-1. Build meta-features: LGB v7 OOF, XGB v7 OOF, (optional) v9 LGB/XGB OOF, NN v1 OOF
-2. Layer 1: 5-fold OOF meta-features (already available)
-3. Layer 2 meta-learner options (all with 5-fold CV):
-   - **Ridge Regression** (linear, fast baseline)
-   - **LightGBM meta** (learns non-linear combinations, 100-500 trees)
-   - **Logistic Regression** (more natural for 0-1 targets)
-4. Evaluate meta OOF Spearman vs simple weighted average
 
-**Key**: meta-features can include predictions from multiple versions (v3, v7, v9) — even if individual versions are weaker, their combination may provide complementary signal.
+Part 1 — Adversarial Validation:
+1. Merge train + test features, label = 0 (train) / 1 (test)
+2. Train LGB classifier (5-fold CV, evaluate AUC)
+3. **Decision threshold**: AUC ~ 0.5 = indistinguishable (skip); AUC > 0.6 = significant shift (proceed)
+4. If AUC > 0.6: use predicted probabilities as additional sample_weight multiplier
+   ```python
+   final_weight = log1p_weight * av_probability  # combine with existing weighting
+   ```
+
+Part 2 — Temporal CV (diagnostic only):
+1. Build CV split: train on M1-4, validate on M5 (or similar temporal split)
+2. Compare Temporal CV Spearman vs Random 5-fold OOF Spearman
+3. If Temporal CV << Random CV, it confirms distribution shift is real and quantifies the expected gap
+4. Use Temporal CV as the primary evaluation metric for subsequent experiments
 
 ---
 
@@ -68,71 +95,147 @@ Pure regularization (no M1-5 TE), isolates the regularization effect.
 
 `notebooks/06_sprint.ipynb` — Section C
 
-**Rationale**: Spearman only cares about rank ordering. Current models train MSE(pred, y), but y has a bimodal distribution (many 0s and 1s), so MSE spends too much effort on the extremes. Training on `rank(y)/N` (uniform distribution) makes MSE directly optimize ranking accuracy, better aligned with Spearman.
+**Rationale**: Spearman only cares about rank ordering. Current models train MSE(pred, y), but y has a bimodal distribution (many 0s and 1s). Training on `rank(y)/N` (uniform distribution) makes MSE directly optimize ranking accuracy. Additionally, a differentiable Spearman post-processing layer can further refine rankings.
+
+**Reference**: Paper 3 (Blondel 2020, Fast Differentiable Sorting)
 
 **Implementation**:
+
+Stage 1 — Rank-Target GBDT (primary):
 1. `y_rank = rankdata(y, method='average') / len(y)`
 2. Train LGB + XGB with v7 params (target = y_rank)
 3. Evaluate OOF using original y's Spearman
 4. Can stack with original v7 predictions
 
-### Experiment D: Adversarial Validation + Sample Re-weighting (GPU, ~30min)
+Stage 2 — torchsort Post-Processing (optional, if Stage 1 shows promise):
+1. `pip install torchsort`
+2. Build a small NN (2-3 layers): input = [LGB_pred, XGB_pred, rank_LGB_pred, rank_XGB_pred], output = refined prediction
+3. Loss = `-spearman_correlation(pred, y)` using `torchsort.soft_sort`
+4. This learns the optimal prediction-to-ranking mapping
 
-`notebooks/06_sprint.ipynb` — Section D
+**Success criteria**: Stage 1 OOF >= 0.635; Stage 2 ensemble OOF > 0.6429
 
-**Rationale**: Train a classifier to distinguish train vs test data. Training samples with high classification probability = "more test-like samples". Giving these higher weight can narrow the train/test distribution gap. Directly addresses the gap at the data level.
+### Experiment H: GBDT Label Noise Handling (GPU, ~1h)
 
-**Implementation**:
-1. Merge train + test, label=0/1
-2. Train LGB classifier (5-fold CV, evaluate AUC)
-3. AUC > 0.5 means train/test are distinguishable → use predicted probabilities as sample_weight
-4. Retrain v7 models with adjusted weights
+`notebooks/06_sprint.ipynb` — Section H
 
-**Decision threshold**: AUC ≈ 0.5 → train/test indistinguishable, method is useless; AUC > 0.6 → significant distribution difference, worth trying
+**Rationale**: 25% of samples have total_count=1 (violation rate is binary: 0 or 1). Current log1p weighting reduces their influence but doesn't address the noise itself. Using model predictions to identify and handle noisy labels can improve both OOF and generalization.
 
-### Experiment E: TabNet (GPU, ~2h)
+**Reference**: Paper 5 (GBDT Label Noise 2024), Paper 8 (Training Dynamics 2022)
+
+**Implementation** (simplified approach, no full training dynamics needed):
+1. Load v7 OOF predictions for total_count=1 subset
+2. Identify "confident noise" candidates:
+   - pred < 0.15 but y = 1 → likely noisy label
+   - pred > 0.85 but y = 0 → likely noisy label
+3. Strategy options (try each, compare OOF):
+   - **(a) Remove**: drop identified noisy samples entirely
+   - **(b) Down-weight**: set weight = 0.1 for noisy samples (vs 0.693 for normal tc=1)
+   - **(c) Label smoothing**: replace y with smoothed value (e.g., y=1 → 0.8, y=0 → 0.2) for noisy samples
+4. Retrain LGB + XGB with v7 params + noise handling
+5. Evaluate OOF Spearman on full dataset AND on tc>=2 subset
+
+**Success criteria**: OOF >= 0.643 (matching v7) with potentially smaller platform gap
+
+### Experiment E: TabM Deep Learning Model (GPU, ~2h)
 
 `notebooks/06_sprint.ipynb` — Section E
 
-**Rationale**: TabNet is a Google Research deep learning model specifically designed for tabular data. It uses attention mechanisms to select important features at each step (similar to GBDT feature selection), and has shown strong performance in Kaggle tabular competitions. Much more suitable than the vanilla ResNet from Step 14.
+**Rationale**: TabM (ICLR 2025) is the current SOTA tabular deep learning model, significantly outperforming TabNet and vanilla MLP/ResNet in recent benchmarks. It uses BatchEnsemble-style parameter sharing to efficiently simulate an MLP ensemble. Much more suitable than the ResNet from Step 14 (OOF 0.42).
+
+**Reference**: Paper 6 (TabM, Gorishniy 2024)
+
+**Why TabM instead of TabNet**:
+- TabNet (2019) is no longer competitive with GBDT in most benchmarks (confirmed by 2024 survey)
+- TabM is simpler (no attention mechanism), yet outperforms TabNet, FT-Transformer, and SAINT
+- Code available at `github.com/yandex-research/tabm`, well-maintained
 
 **Implementation**:
-1. `pip install pytorch-tabnet`
-2. Use TabNetRegressor, 5-fold CV
-3. Key params: `n_d=64, n_a=64, n_steps=5, gamma=1.5`
-4. sample_weight = log1p(total_count)
-5. Evaluate OOF Spearman and correlation with GBDT
+1. `pip install tabm` or clone from GitHub
+2. Use TabM with BatchEnsemble (k=32 ensemble members)
+3. 5-fold CV, same folds as GBDT
+4. Key hyperparams: `n_blocks=3, d_block=256, dropout=0.1`
+5. sample_weight = log1p(total_count)
+6. Evaluate OOF Spearman and correlation with GBDT
 
-**Expected**: TabNet OOF may reach 0.55-0.62 (significantly above ResNet's 0.42), with lower correlation to GBDT.
+**Expected**: TabM OOF may reach 0.55-0.60 (significantly above ResNet's 0.42), with lower correlation to GBDT (target < 0.85).
 
-### Day 2 submissions: Pick best 2 from Experiments B-E
+**Success criteria**: OOF >= 0.55 AND correlation with v7 ensemble < 0.85
+
+### Day 2 submissions: Pick best 2 from Experiments C, D, H, E
 
 ---
 
 ## Day 3 (4/10) — Combine Best + Transition to Report
+
+### Experiment G: Pseudo-Labeling with Curriculum Strategy (GPU, ~1h)
+
+`notebooks/06_sprint.ipynb` — Section G
+
+**Rationale**: Use confident test predictions as pseudo-labels to augment training. Since test is M1-5 only, this adds more M1-5 data for training — directly addressing the distribution imbalance. Curriculum approach (high confidence first, then medium) reduces confirmation bias.
+
+**Reference**: Paper 4 (Revisiting Self-Training 2023)
+
+**Implementation** (curriculum, not simple thresholding):
+1. Layer 1 — High confidence pseudo-labels:
+   - Select v7 test predictions where < 0.02 or > 0.98
+   - Add to training set with weight = 0.7
+   - Retrain LGB + XGB (v7 params)
+2. Layer 2 — Medium confidence (optional):
+   - Use Layer 1 model to re-predict test
+   - Add predictions where < 0.10 or > 0.90 (excluding Layer 1 samples)
+   - Weight = 0.3
+   - Retrain again
+3. Evaluate OOF on **original train only** (exclude pseudo-labels)
+4. **Safety check**: if OOF drops > 0.003 after adding pseudo-labels, abort immediately
+
+**Success criteria**: OOF >= 0.6429 with pseudo-labels (no degradation)
+
+### Experiment B: Stacking Meta-Learner (Local, ~30min)
+
+`notebooks/06_sprint.ipynb` — Section B
+
+**Rationale**: Only worth doing if Experiments C, E, or H produced new effective models. Simple weighted average assumes linear additivity, but meta-learners can capture non-linear interactions.
+
+**Precondition**: At least 3 models with non-zero ensemble weight available.
+
+**Implementation**:
+1. Build meta-features from all models with OOF > 0.55:
+   - LGB v7, XGB v7
+   - Rank-target LGB/XGB (if C succeeded)
+   - TabM (if E succeeded)
+   - Noise-handled LGB/XGB (if H succeeded)
+2. Layer 2 meta-learner options (5-fold CV):
+   - **Ridge Regression** (linear, fast baseline)
+   - **LightGBM meta** (100-500 trees, learns non-linear combinations)
+3. Compare meta OOF Spearman vs simple weighted average
+4. If meta-learner > weighted average by >= 0.001, use meta-learner for submission
 
 ### Experiment F: Final Ensemble Combination
 
 `notebooks/06_sprint.ipynb` — Section F
 
 **Rationale**: Combine all models/methods with positive signal:
-- Layer 1: LGB v7, XGB v7, Rank-target LGB/XGB, TabNet (if effective)
+- Layer 1: LGB v7, XGB v7, Rank-target LGB/XGB, TabM (if effective)
 - Layer 2: Stacking meta-learner or Optuna weight search
-- Optional: adversarial weights
-
-### Experiment G: Pseudo-Labeling (if time permits)
-
-`notebooks/06_sprint.ipynb` — Section G
-
-**Rationale**: Use "high confidence" test predictions from v7 ensemble (close to 0 or 1) as pseudo-labels, add to training set for retraining. Increases M1-5 training data volume, may improve generalization.
-
-**Implementation**:
-1. Select v7 test predictions where < 0.05 or > 0.95
-2. Add these pseudo-labeled samples to training set (lower weight, e.g., 0.5)
-3. Retrain LGB + XGB
-4. Evaluate OOF (on original train only, excluding pseudo-labels)
+- Optional: adversarial weights from Experiment D
 
 ### Day 3 afternoon: Transition to video production
+
+---
+
+## Experiment Priority (Revised)
+
+| Priority | Experiment | Method | Expected Benefit | Cost | Change from v1 |
+|----------|------------|--------|-----------------|------|-----------------|
+| P0 | A: M1-5 Weight Optimization | Ensemble | Low-Med | 5 min local | unchanged |
+| P0 | D: Adversarial Validation | Distribution Alignment | Med | 30 min GPU | + Temporal CV |
+| P0 | C: Rank-Based Target | Loss Optimization | Med-High | 1h GPU | + torchsort option |
+| P1 | H: Label Noise Handling | Data Quality | Med | 1h GPU | **NEW** |
+| P1 | E: TabM (was TabNet) | DL/Tabular SOTA | Med | 2h GPU | TabNet → TabM |
+| P1 | G: Pseudo-Labeling | Semi-Supervised | Low-Med | 1h GPU | + curriculum strategy |
+| P2 | B: Stacking Meta-Learner | Ensemble | Conditional | 30 min | depends on C/E/H |
+| P2 | F: Final Ensemble | Combination | Depends | Low | unchanged |
 
 ---
 
@@ -141,7 +244,7 @@ Pure regularization (no M1-5 TE), isolates the regularization effect.
 ### Files to Create
 | File | Purpose |
 |------|---------|
-| `notebooks/06_sprint.ipynb` | Sprint experiment notebook (Sections A-G) |
+| `notebooks/06_sprint.ipynb` | Sprint experiment notebook (Sections A-H) |
 
 ### Files to Read
 | File | Purpose |
@@ -154,19 +257,15 @@ Pure regularization (no M1-5 TE), isolates the regularization effect.
 | `models/nn_oof_v1.npy`, `nn_test_v1.npy` | NN v1 predictions (for stacking) |
 | `scripts/step10_gpu.py` | GBDT training template |
 
----
-
-## Experiment Priority
-
-| Experiment | Method Category | Expected Benefit | Cost | Priority |
-|------------|----------------|-----------------|------|----------|
-| A: M1-5 Weight Optimization | Ensemble | Low-Med | Very low (local, ~5min) | P0 |
-| B: Stacking Meta-Learner | ML/Ensemble | Med | Low (local/GPU 30min) | P0 |
-| D: Adversarial Validation | ML/Distribution Alignment | Med | Low (GPU 30min) | P0 |
-| C: Rank-Based Target | ML/Loss Optimization | Med-High | Med (GPU ~1h) | P1 |
-| E: TabNet | DL/Tabular-Specific | Med | Med (GPU ~2h) | P1 |
-| F: Final Ensemble | ML/Combination | Depends on above | Low | P1 |
-| G: Pseudo-Labeling | ML/Semi-Supervised | Low-Med | Med (GPU ~1h) | P2 |
+### Reference Papers (in `research_parking_violations/papers/AI/`)
+| File | Topic |
+|------|-------|
+| `adversarial_validation_2021.pdf` | Experiment D methodology |
+| `temporal_shift_2025.pdf` | Experiment D theory |
+| `differentiable_sorting_2020.pdf` | Experiment C Stage 2 |
+| `pseudo_labeling_tabular_2023.pdf` | Experiment G curriculum strategy |
+| `gbdt_label_noise_2024.pdf` | Experiment H methodology |
+| `tabm_2024.pdf` | Experiment E model architecture |
 
 ---
 
