@@ -1,4 +1,4 @@
-# 数据文件（太大，不上传 GitHub，队友请从 ChallengeData 下载）
+# 数据文件（太大，不上传 GitHub）
 163-Predict parking violations/*.csv
 data/*.parquet
 data/*.pkl
@@ -23,7 +23,7 @@ build/
 .vscode/
 .idea/
 
-# Claude Code（私有配置）
+# Code（私有配置）
 .claude/
 CLAUDE.md
 
@@ -44,3 +44,7 @@ notebooks/*_executed.ipynb
 *.tmp
 *.bak
 *.log
+
+# Code artifacts
+.agents/
+skills-lock.json
