@@ -1224,6 +1224,84 @@ MSE 直接优化排名误差，与评估指标一致。
 | `figures/av_feature_importance.png` | AV 特征重要性对比图 |
 | `figures/av_probability_distribution.png` | AV 概率分布图 |
 
+### Sprint Experiment H — GBDT Label Noise Handling ✅
+
+**日期**: 2026-04-09  
+**状态**: 已完成（GPU 训练 + 本地分析）  
+**Notebook**: `notebooks/06_sprint.ipynb` Section H  
+**GPU 脚本**: `scripts/step_h_gpu.py`  
+**GPU 运行时间**: 3 策略共 ~2.5h（LGB ~33 min × 3 + XGB ~10-28 min × 3）
+
+#### 核心思路
+
+25% 训练样本 total_count=1（违规率只有 0 或 1），属于高噪声标签。v7 的 log1p 加权已部分缓解（weight=0.693），但标签本身未处理。  
+利用 v7 ensemble OOF 预测识别"自信错误"的 tc=1 样本作为噪声候选，测试三种处理策略。
+
+#### 噪声识别
+
+| 指标 | 值 |
+|------|-----|
+| tc=1 样本数 | 1,532,442 (25.2%) |
+| 噪声: pred<0.15 & y=1 | 2,168 (0.04%) |
+| 噪声: pred>0.85 & y=0 | 34,340 (0.57%) |
+| **总噪声候选** | **36,508 (0.60%)** |
+| tc=1 Spearman | 0.4521 |
+| 清洁 tc=1 Spearman | 0.5230 |
+| tc≥2 Spearman | 0.7243 |
+
+- 噪声候选高度不对称：pred>0.85 & y=0 占 94%
+
+#### 三种策略结果
+
+| Strategy | LGB OOF | XGB OOF | Ens OOF | M1-5 OOF | delta vs v7 |
+|----------|---------|---------|---------|----------|-------------|
+| v7 baseline | 0.6336 | 0.6403 | 0.6429 | 0.6515 | — |
+| **(a) Remove** | 0.6342 | 0.6421 | **0.6442** | **0.6526** | **+0.0013** |
+| (b) Down-weight | 0.6340 | 0.6420 | 0.6441 | 0.6526 | +0.0012 |
+| (c) Label smooth | 0.6341 | 0.6410 | 0.6435 | 0.6521 | +0.0006 |
+
+- Success criterion (OOF ≥ 0.643): **✓ PASS**（三种策略均通过）
+- 最佳策略: **(a) Remove**，OOF 0.6442，M1-5 0.6526
+
+#### 与 v7 相关性
+
+| Strategy | 与 v7 ensemble 相关 |
+|----------|-------------------|
+| (a) Remove | 0.9918 |
+| (b) Down-weight | 0.9944 |
+| (c) Label smooth | 0.9971 |
+
+- 所有策略与 v7 高度相关（>0.99），对 ensemble diversity 几乎无贡献
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| 噪声候选仅占 0.6% | 影响面小，OOF 增益有限（+0.001 级别） |
+| 策略 a ≈ b > c | Remove 和 Down-weight 效果接近，Label smooth 最弱 |
+| XGB 受益更大 | XGB delta +0.0018 vs LGB +0.0006，XGB 对噪声更敏感 |
+| LGB 全部 ran to limit | 10000 轮未早停（用 L2 作 ES 指标），可能还有微量提升空间 |
+| 收益不如 Exp C | Exp C +0.0035 vs Exp H +0.0013，rank-target 性价比更高 |
+
+#### 待确认
+
+- [ ] 提交 `ensemble_ha.csv` 到 platform，获取实际分数
+- [ ] 探索 Exp C + Exp H 结合（在 rank-target 训练中同时去掉噪声样本）
+
+#### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/step_h_gpu.py` | GPU 服务器完整训练脚本 |
+| `step_h_gpu.log` | GPU 运行完整日志 |
+| `models/lgb_h{a,b,c}_oof.npy` / `lgb_h{a,b,c}_test.npy` | LGB 三种策略预测 |
+| `models/xgb_h{a,b,c}_oof.npy` / `xgb_h{a,b,c}_test.npy` | XGB 三种策略预测 |
+| `submissions/ensemble_ha.csv` | 最佳策略提交 (a) Remove (OOF=0.6442) |
+| `submissions/ensemble_hb.csv` | (b) Down-weight (OOF=0.6441) |
+| `submissions/ensemble_hc.csv` | (c) Label smooth (OOF=0.6435) |
+| `notebooks/06_sprint.ipynb` Section H | 分析 notebook，带完整输出 |
+| `docs/figures/fig_h_noise_diagnosis.png` | 噪声诊断可视化 |
+
 ---
 
 ## Phase 6 — 报告

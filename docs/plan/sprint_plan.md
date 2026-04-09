@@ -21,6 +21,7 @@
 | v10 | DART Boosting | 0.6406 | not submitted | — | LGB OOF -0.019 |
 | v11 | +NN (weight=0) | 0.6429 | not submitted | — | NN OOF 0.42 |
 | Exp C | Rank-target LGB+XGB | **0.6464** | pending | — | +0.0035 vs v7, replaces v7 |
+| Exp H(a) | Remove noise (tc=1) | **0.6442** | pending | — | +0.0013 vs v7, corr 0.99 |
 
 ### Lessons from Steps 8-14
 
@@ -103,27 +104,15 @@ Part 2 — Temporal CV (diagnostic only):
 - Stage 2 (torchsort): viable but low priority given deadline pressure
 - **Pending**: submit to platform for actual score
 
-### Experiment H: GBDT Label Noise Handling (GPU, ~1h)
+### Experiment H: GBDT Label Noise Handling (GPU, ~1h) ✅ COMPLETED
 
-`notebooks/06_sprint.ipynb` — Section H
+`notebooks/06_sprint.ipynb` — Section H | `scripts/step_h_gpu.py`
 
-**Rationale**: 25% of samples have total_count=1 (violation rate is binary: 0 or 1). Current log1p weighting reduces their influence but doesn't address the noise itself. Using model predictions to identify and handle noisy labels can improve both OOF and generalization.
-
-**Reference**: Paper 5 (GBDT Label Noise 2024), Paper 8 (Training Dynamics 2022)
-
-**Implementation** (simplified approach, no full training dynamics needed):
-1. Load v7 OOF predictions for total_count=1 subset
-2. Identify "confident noise" candidates:
-   - pred < 0.15 but y = 1 → likely noisy label
-   - pred > 0.85 but y = 0 → likely noisy label
-3. Strategy options (try each, compare OOF):
-   - **(a) Remove**: drop identified noisy samples entirely
-   - **(b) Down-weight**: set weight = 0.1 for noisy samples (vs 0.693 for normal tc=1)
-   - **(c) Label smoothing**: replace y with smoothed value (e.g., y=1 → 0.8, y=0 → 0.2) for noisy samples
-4. Retrain LGB + XGB with v7 params + noise handling
-5. Evaluate OOF Spearman on full dataset AND on tc>=2 subset
-
-**Success criteria**: OOF >= 0.643 (matching v7) with potentially smaller platform gap
+**Result**: ✓ PASS. Best strategy (a) Remove: OOF **0.6442** (+0.0013 vs v7), M1-5 **0.6526**.
+- 36,508 noise candidates identified (0.60% of train), mostly pred>0.85 & y=0
+- All three strategies beat v7; (a) Remove ≈ (b) Down-weight > (c) Label smooth
+- Correlation with v7: >0.99 → low diversity, stacking unlikely to help
+- **Pending**: submit `ensemble_ha.csv` to platform for actual score
 
 ### Experiment E: TabM Deep Learning Model (GPU, ~2h)
 
@@ -219,7 +208,7 @@ Part 2 — Temporal CV (diagnostic only):
 | P0 | A: M1-5 Weight Optimization | Ensemble | Low-Med | 5 min local | unchanged |
 | P0 | D: Adversarial Validation | Distribution Alignment | Med | 30 min GPU | + Temporal CV |
 | ✅ | C: Rank-Based Target | Loss Optimization | **+0.0035 OOF** | 1h GPU | Stage 1 done, rank replaces v7 |
-| P1 | H: Label Noise Handling | Data Quality | Med | 1h GPU | **NEW** |
+| ✅ | H: Label Noise Handling | Data Quality | **+0.0013 OOF** | 2.5h GPU | (a) Remove best, high corr w/ v7 |
 | P1 | E: TabM (was TabNet) | DL/Tabular SOTA | Med | 2h GPU | TabNet → TabM |
 | P1 | G: Pseudo-Labeling | Semi-Supervised | Low-Med | 1h GPU | + curriculum strategy |
 | P2 | B: Stacking Meta-Learner | Ensemble | Conditional | 30 min | depends on C/E/H |
