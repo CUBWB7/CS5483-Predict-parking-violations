@@ -1096,6 +1096,50 @@ v7 ensemble 权重（LGB=0.35, XGB=0.65）是在全量 12 月 OOF 上以 step=0.
 | `notebooks/06_sprint.ipynb` Section A | Sprint notebook，带完整输出 |
 | `submissions/ensemble_v12.csv` | v12 提交（v8a test + M1-5 权重，不建议提交平台） |
 
+### Sprint Experiment C — Rank-Based Target Training
+
+**日期**: 2026-04-09  
+**状态**: GPU 脚本已写好，待在服务器上运行  
+**Notebook**: `notebooks/06_sprint.ipynb` Section C（自包含，可独立运行）  
+**GPU 脚本**: `scripts/step_c_gpu.py`
+
+#### 核心思路
+
+当前模型训练目标是原始 `invalid_ratio`（双峰分布：25% 样本 total_count=1，违规率只有 0 或 1）。
+由于 Spearman 只关心排名，改用 `y_rank = rankdata(y) / N` 作为训练目标（均匀分布），
+MSE 直接优化排名误差，与评估指标一致。
+
+- 模型参数：与 v7 完全一致（Optuna v3 + log1p 加权）
+- 唯一变更：target = rank(invalid_ratio) / N
+- 产出：`lgb_rank_oof/test.npy`、`xgb_rank_oof/test.npy`
+
+#### 成功标准
+
+| 阶段 | 标准 |
+|------|------|
+| Stage 1 OOF | ≥ 0.635（与 v7 LGB 0.6336 / v7 XGB 0.6403 相比） |
+| Ensemble | > 0.6429（超越 v7 基线） |
+
+#### 关键待确认问题
+
+| 问题 | 背景 |
+|------|------|
+| rank 模型与 v7 相关性 | 若 > 0.97，stacking 无收益 |
+| rank 目标是否提升 OOF | 预期有轻微提升（更平滑的损失面） |
+| 是否进行 Stage 2 torchsort | 仅在 Stage 1 OOF ≥ 0.635 时考虑 |
+
+#### 产出文件（GPU 运行后）
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/step_c_gpu.py` | GPU 服务器完整训练脚本 |
+| `models/lgb_rank_oof.npy` / `lgb_rank_test.npy` | LGB rank-target 预测 |
+| `models/xgb_rank_oof.npy` / `xgb_rank_test.npy` | XGB rank-target 预测 |
+| `submissions/ensemble_c_rank.csv` | rank-only ensemble 提交 |
+| `submissions/ensemble_c_combined.csv` | v7 + rank 4-model ensemble（若 v7 test 可用） |
+
+---
+
 ### Sprint Experiment D — Adversarial Validation + Temporal CV
 
 **日期**: 2026-04-08  
