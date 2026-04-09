@@ -20,6 +20,7 @@
 | v9a | v9 + M1-5 TE | 0.6326 | 0.5477 | 0.085 | double penalty |
 | v10 | DART Boosting | 0.6406 | not submitted | — | LGB OOF -0.019 |
 | v11 | +NN (weight=0) | 0.6429 | not submitted | — | NN OOF 0.42 |
+| Exp C | Rank-target LGB+XGB | **0.6464** | pending | — | +0.0035 vs v7, replaces v7 |
 
 ### Lessons from Steps 8-14
 
@@ -91,29 +92,16 @@ Part 2 — Temporal CV (diagnostic only):
 
 ## Day 2 (4/09) — New Models + New Methods
 
-### Experiment C: Rank-Based Target Training (GPU, ~1h)
+### Experiment C: Rank-Based Target Training (GPU, ~1h) ✅ COMPLETED
 
-`notebooks/06_sprint.ipynb` — Section C
+`notebooks/06_sprint.ipynb` — Section C | `scripts/step_c_gpu.py`
 
-**Rationale**: Spearman only cares about rank ordering. Current models train MSE(pred, y), but y has a bimodal distribution (many 0s and 1s). Training on `rank(y)/N` (uniform distribution) makes MSE directly optimize ranking accuracy. Additionally, a differentiable Spearman post-processing layer can further refine rankings.
-
-**Reference**: Paper 3 (Blondel 2020, Fast Differentiable Sorting)
-
-**Implementation**:
-
-Stage 1 — Rank-Target GBDT (primary):
-1. `y_rank = rankdata(y, method='average') / len(y)`
-2. Train LGB + XGB with v7 params (target = y_rank)
-3. Evaluate OOF using original y's Spearman
-4. Can stack with original v7 predictions
-
-Stage 2 — torchsort Post-Processing (optional, if Stage 1 shows promise):
-1. `pip install torchsort`
-2. Build a small NN (2-3 layers): input = [LGB_pred, XGB_pred, rank_LGB_pred, rank_XGB_pred], output = refined prediction
-3. Loss = `-spearman_correlation(pred, y)` using `torchsort.soft_sort`
-4. This learns the optimal prediction-to-ranking mapping
-
-**Success criteria**: Stage 1 OOF >= 0.635; Stage 2 ensemble OOF > 0.6429
+**Result**: Stage 1 ✓ PASS. Rank-only ensemble OOF **0.6464** (+0.0035 vs v7).
+- LGB rank OOF: 0.6373 (+0.0037), XGB rank OOF: 0.6430 (+0.0027)
+- v7 models get ~0 weight in 4-model ensemble → rank-target fully replaces v7
+- Correlation with v7: ~0.99 → stacking unlikely to help
+- Stage 2 (torchsort): viable but low priority given deadline pressure
+- **Pending**: submit to platform for actual score
 
 ### Experiment H: GBDT Label Noise Handling (GPU, ~1h)
 
@@ -230,7 +218,7 @@ Stage 2 — torchsort Post-Processing (optional, if Stage 1 shows promise):
 |----------|------------|--------|-----------------|------|-----------------|
 | P0 | A: M1-5 Weight Optimization | Ensemble | Low-Med | 5 min local | unchanged |
 | P0 | D: Adversarial Validation | Distribution Alignment | Med | 30 min GPU | + Temporal CV |
-| P0 | C: Rank-Based Target | Loss Optimization | Med-High | 1h GPU | + torchsort option |
+| ✅ | C: Rank-Based Target | Loss Optimization | **+0.0035 OOF** | 1h GPU | Stage 1 done, rank replaces v7 |
 | P1 | H: Label Noise Handling | Data Quality | Med | 1h GPU | **NEW** |
 | P1 | E: TabM (was TabNet) | DL/Tabular SOTA | Med | 2h GPU | TabNet → TabM |
 | P1 | G: Pseudo-Labeling | Semi-Supervised | Low-Med | 1h GPU | + curriculum strategy |

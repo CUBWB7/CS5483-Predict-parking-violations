@@ -1096,12 +1096,13 @@ v7 ensemble 权重（LGB=0.35, XGB=0.65）是在全量 12 月 OOF 上以 step=0.
 | `notebooks/06_sprint.ipynb` Section A | Sprint notebook，带完整输出 |
 | `submissions/ensemble_v12.csv` | v12 提交（v8a test + M1-5 权重，不建议提交平台） |
 
-### Sprint Experiment C — Rank-Based Target Training
+### Sprint Experiment C — Rank-Based Target Training ✅
 
 **日期**: 2026-04-09  
-**状态**: GPU 脚本已写好，待在服务器上运行  
+**状态**: 已完成（GPU 训练 + 本地分析）  
 **Notebook**: `notebooks/06_sprint.ipynb` Section C（自包含，可独立运行）  
-**GPU 脚本**: `scripts/step_c_gpu.py`
+**GPU 脚本**: `scripts/step_c_gpu.py`  
+**GPU 运行时间**: LGB ~32 min + XGB ~10 min + Ensemble B ~15 min ≈ 57 min
 
 #### 核心思路
 
@@ -1111,32 +1112,57 @@ MSE 直接优化排名误差，与评估指标一致。
 
 - 模型参数：与 v7 完全一致（Optuna v3 + log1p 加权）
 - 唯一变更：target = rank(invalid_ratio) / N
-- 产出：`lgb_rank_oof/test.npy`、`xgb_rank_oof/test.npy`
 
-#### 成功标准
+#### Stage 1 结果：✓ PASS
 
-| 阶段 | 标准 |
-|------|------|
-| Stage 1 OOF | ≥ 0.635（与 v7 LGB 0.6336 / v7 XGB 0.6403 相比） |
-| Ensemble | > 0.6429（超越 v7 基线） |
+| 模型 | OOF Spearman | M1-5 OOF | vs v7 OOF |
+|------|-------------|----------|-----------|
+| LGB (rank target) | 0.6373 | 0.6440 | +0.0037 |
+| XGB (rank target) | 0.6430 | 0.6486 | +0.0027 |
+| v7 LGB (baseline) | 0.6336 | 0.6428 | — |
+| v7 XGB (baseline) | 0.6403 | 0.6482 | — |
 
-#### 关键待确认问题
+- Stage 1 pass criterion (OOF ≥ 0.635): **✓ PASS** (best: 0.6430)
+- LGB best_iter 全部在 9998-10000，说明 10000 轮不够，可能还有提升空间
 
-| 问题 | 背景 |
-|------|------|
-| rank 模型与 v7 相关性 | 若 > 0.97，stacking 无收益 |
-| rank 目标是否提升 OOF | 预期有轻微提升（更平滑的损失面） |
-| 是否进行 Stage 2 torchsort | 仅在 Stage 1 OOF ≥ 0.635 时考虑 |
+#### 模型相关性
 
-#### 产出文件（GPU 运行后）
+| 组合 | Spearman 相关 |
+|------|-------------|
+| rank LGB — rank XGB | 0.9628 |
+| v7 LGB — rank LGB | 0.9899 |
+| v7 XGB — rank XGB | 0.9915 |
+| v7 LGB — v7 XGB (ref) | 0.9650 |
+
+- rank 模型与 v7 高度相关（≥ 0.97），stacking 收益有限
+
+#### Ensemble 结果
+
+| Ensemble | 权重 | OOF | M1-5 OOF | vs v7 |
+|----------|------|-----|----------|-------|
+| A: rank-only (LGB+XGB) | LGB=0.39, XGB=0.61 | **0.6464** | 0.6527 | +0.0035 |
+| B: 4-model (v7+rank) | v7LGB=0.00, v7XGB=0.05, rLGB=0.40, rXGB=0.55 | **0.6465** | 0.6529 | +0.0036 |
+
+- v7 模型权重接近 0 → rank-target 模型已完全替代 v7
+- 4-model ensemble 相比 rank-only 几乎无额外收益（+0.0001）
+- **推荐提交**: `ensemble_c_rank.csv`（更简洁，OOF 差异可忽略）
+
+#### 待确认
+
+- [ ] 提交 `ensemble_c_rank.csv` 或 `ensemble_c_combined.csv` 到 platform，获取实际分数
+- [ ] Stage 2 torchsort: Stage 1 已 PASS，技术上可行，但距报告截止时间紧迫，优先级降低
+
+#### 产出文件
 
 | 文件 | 说明 |
 |------|------|
 | `scripts/step_c_gpu.py` | GPU 服务器完整训练脚本 |
+| `step_c_gpu.log` | GPU 运行完整日志 |
 | `models/lgb_rank_oof.npy` / `lgb_rank_test.npy` | LGB rank-target 预测 |
 | `models/xgb_rank_oof.npy` / `xgb_rank_test.npy` | XGB rank-target 预测 |
-| `submissions/ensemble_c_rank.csv` | rank-only ensemble 提交 |
-| `submissions/ensemble_c_combined.csv` | v7 + rank 4-model ensemble（若 v7 test 可用） |
+| `submissions/ensemble_c_rank.csv` | rank-only ensemble 提交 (OOF=0.6464) |
+| `submissions/ensemble_c_combined.csv` | v7 + rank 4-model ensemble (OOF=0.6465) |
+| `notebooks/06_sprint.ipynb` Section C | 分析 notebook，带完整输出 |
 
 ---
 
