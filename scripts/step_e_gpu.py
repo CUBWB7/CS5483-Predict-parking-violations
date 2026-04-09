@@ -352,14 +352,7 @@ def main():
 
     # ── Save submission ─────────────────────────────────────────────────────────
     # Generate submission CSV (single-model TabM)
-    sub_df = test_df[["id"]].copy() if "id" in test_df.columns else pd.DataFrame()
-    if sub_df.empty:
-        # Build id column from test index (matches other submissions)
-        sub_df = pd.read_csv(
-            os.path.join(ROOT, "163-Predict parking violations",
-                         "x_test_final_fIrnA7Q.csv"),
-            usecols=["id"])
-    sub_df["invalid_ratio"] = test_preds
+    sub_df = pd.DataFrame({"id": test_df.index, "invalid_ratio": test_preds})
     sub_path = os.path.join(SUBMIT_DIR, "ensemble_tabm.csv")
     sub_df.to_csv(sub_path, index=False)
     print(f"  Saved: {sub_path}")
