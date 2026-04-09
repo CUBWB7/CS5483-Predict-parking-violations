@@ -112,11 +112,22 @@ X_test = test_df[FEATURES]
 m1_5_mask = train_df['month_of_year'].isin([1, 2, 3, 4, 5]).values
 
 # ── Load v7 OOF predictions for noise identification ───────────────────────────
+# v8a OOF is identical to v7 OOF (same training, only test-time TE differs),
+# so it is safe to fall back to v8a when v7 files are not present on the server.
+def _load_v7(name_v7, name_v8a):
+    for name in [name_v7, name_v8a]:
+        path = f'{MODEL_DIR}{name}'
+        if os.path.exists(path):
+            print(f'  Loaded {name}')
+            return np.load(path)
+    raise FileNotFoundError(
+        f'Neither {name_v7} nor {name_v8a} found in {MODEL_DIR}')
+
 print('\nLoading v7 OOF predictions...')
-lgb_oof_v7 = np.load(f'{MODEL_DIR}lgb_oof_v7.npy')
-xgb_oof_v7 = np.load(f'{MODEL_DIR}xgb_oof_v7.npy')
-lgb_test_v7 = np.load(f'{MODEL_DIR}lgb_test_v7.npy')
-xgb_test_v7 = np.load(f'{MODEL_DIR}xgb_test_v7.npy')
+lgb_oof_v7  = _load_v7('lgb_oof_v7.npy',  'lgb_oof_v8a.npy')
+xgb_oof_v7  = _load_v7('xgb_oof_v7.npy',  'xgb_oof_v8a.npy')
+lgb_test_v7 = _load_v7('lgb_test_v7.npy', 'lgb_test_v8a.npy')
+xgb_test_v7 = _load_v7('xgb_test_v7.npy', 'xgb_test_v8a.npy')
 
 # v7 ensemble (established weights LGB=0.35, XGB=0.65)
 ens_oof_v7 = 0.35 * lgb_oof_v7 + 0.65 * xgb_oof_v7
@@ -348,18 +359,6 @@ for strat in STRATEGIES:
     results[strat] = (lgb_oof, lgb_test, xgb_oof, xgb_test)
 
 
-# ── Load v7 CB predictions for ensemble search ─────────────────────────────────
-cb_oof_path = f'{MODEL_DIR}cb_oof_v4.npy'
-if os.path.exists(cb_oof_path):
-    cb_oof_v4  = np.load(cb_oof_path)
-    cb_test_v4 = np.load(f'{MODEL_DIR}cb_test_v4.npy')
-    print(f'\nLoaded cb_oof_v4 for ensemble search.')
-else:
-    cb_oof_v4  = None
-    cb_test_v4 = None
-    print('\ncb_oof_v4.npy not found; ensemble search will use LGB+XGB only.')
-
-
 # ── Ensemble weight search + submission generation ─────────────────────────────
 def best_ensemble(lgb_oof, xgb_oof, lgb_test, xgb_test):
     """Grid-search optimal LGB/XGB blend weights (step=0.01)."""
@@ -392,9 +391,9 @@ for strat in STRATEGIES:
     print(f'{name:<28} {lgb_rho:>8.4f} {xgb_rho:>8.4f} {ens_rho:>8.4f} {best_w[0]:>7.2f} {best_w[1]:>7.2f}')
 
     # Save submission
-    sub = pd.DataFrame({'invalid_ratio': ens_test})
     sub_path = f'{SUBMIT_DIR}ensemble_h{strat}.csv'
-    sub.to_csv(sub_path, index=True, index_label='')
+    sub = pd.DataFrame({'id': test_df.index, 'invalid_ratio': ens_test})
+    sub.to_csv(sub_path, index=False)
 
     # Validation checks
     assert np.isnan(ens_test).sum() == 0,     f'NaN in {sub_path}'
