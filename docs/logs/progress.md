@@ -1147,9 +1147,15 @@ MSE 直接优化排名误差，与评估指标一致。
 - 4-model ensemble 相比 rank-only 几乎无额外收益（+0.0001）
 - **推荐提交**: `ensemble_c_rank.csv`（更简洁，OOF 差异可忽略）
 
+#### Platform 提交结果
+
+- **`ensemble_c_rank.csv` → Platform 0.5698** 🎉 **NEW BEST** (v7 was 0.5636, +0.0062)
+  - OOF 0.6464 → Platform 0.5698, gap = 0.0766 (v7 gap was 0.0793, 缩小了 0.0027)
+  - rank-target 训练同时提升了 OOF 和 platform，且 gap 也略有收窄
+
 #### 待确认
 
-- [ ] 提交 `ensemble_c_rank.csv` 或 `ensemble_c_combined.csv` 到 platform，获取实际分数
+- [x] ~~提交 `ensemble_c_rank.csv` 到 platform~~ → **0.5698 (NEW BEST)**
 - [ ] Stage 2 torchsort: Stage 1 已 PASS，技术上可行，但距报告截止时间紧迫，优先级降低
 
 #### 产出文件
@@ -1283,10 +1289,17 @@ MSE 直接优化排名误差，与评估指标一致。
 | LGB 全部 ran to limit | 10000 轮未早停（用 L2 作 ES 指标），可能还有微量提升空间 |
 | 收益不如 Exp C | Exp C +0.0035 vs Exp H +0.0013，rank-target 性价比更高 |
 
+#### Platform 提交结果
+
+- **`ensemble_ha.csv` → Platform 0.5613** ❌ 低于 v7 (0.5636, -0.0023)
+  - OOF 0.6442 → Platform 0.5613, gap = 0.0829 (v7 gap was 0.0793, 扩大了 0.0036)
+  - OOF 提升 +0.0013 未能转化为 platform 收益，反而 gap 扩大
+  - **原因分析**: 噪声识别基于 v7 OOF 预测，去掉的 36K 样本可能包含了对 test 分布有用的信息
+
 #### 待确认
 
-- [ ] 提交 `ensemble_ha.csv` 到 platform，获取实际分数
-- [ ] 探索 Exp C + Exp H 结合（在 rank-target 训练中同时去掉噪声样本）
+- [x] ~~提交 `ensemble_ha.csv` 到 platform~~ → **0.5613 (低于 v7)**
+- [ ] 探索 Exp C + Exp H 结合 — 鉴于 H 单独提交 platform 下降，需谨慎评估
 
 #### 产出文件
 
@@ -1301,6 +1314,100 @@ MSE 直接优化排名误差，与评估指标一致。
 | `submissions/ensemble_hc.csv` | (c) Label smooth (OOF=0.6435) |
 | `notebooks/06_sprint.ipynb` Section H | 分析 notebook，带完整输出 |
 | `docs/figures/fig_h_noise_diagnosis.png` | 噪声诊断可视化 |
+
+### Sprint Experiment E — TabM Deep Learning Model ❌ OOF 不达标
+
+**日期**: 2026-04-09  
+**状态**: 已完成（GPU 训练 + 本地分析）  
+**Notebook**: `notebooks/06_sprint.ipynb` Section E  
+**GPU 脚本**: `scripts/step_e_gpu.py`  
+**GPU 运行时间**: 5 折共 ~119 min（每折 20-26 min）
+
+#### 核心思路
+
+TabM (ICLR 2025) 是当前 SOTA tabular deep learning 模型，使用 BatchEnsemble 参数共享高效模拟 MLP ensemble。目标是获得与 GBDT 互补的深度学习预测，通过 ensemble 提升整体表现。
+
+- 架构: BatchEnsemble MLP, K=32 ensemble members, 3 blocks, d=256, dropout=0.1
+- 训练: MSE loss, AdamW, lr=1e-3, batch_size=4096, max_epochs=50, patience=7
+- 早停指标: Spearman (非 RMSE)
+- 样本加权: log1p(total_count)
+
+#### 训练过程
+
+| Fold | Best Epoch | OOF Spearman | 训练时间 |
+|------|-----------|-------------|---------|
+| 0 | 14 | 0.4417 | 21.9 min |
+| 1 | 18 | 0.4458 | 25.5 min |
+| 2 | 14 | 0.4378 | 19.4 min |
+| 3 | 20 | 0.4530 | 26.0 min |
+| 4 | 18 | 0.4452 | 25.8 min |
+
+- 各折表现稳定（std < 0.005），非偶然
+- 典型训练曲线：14-20 epoch 达到最佳后 val_spearman 开始下降（过拟合）
+
+#### 结果
+
+| 指标 | TabM | v7 baseline | Delta |
+|------|------|-------------|-------|
+| OOF Spearman (all) | 0.4445 | 0.6429 | -0.1984 |
+| M1-5 OOF Spearman | 0.4601 | 0.6515 | -0.1914 |
+| Success criterion (OOF ≥ 0.55) | **FAIL** | — | — |
+
+#### 多样性检查
+
+| 组合 | Spearman 相关 |
+|------|-------------|
+| TabM — v7 LGB | 0.7593 |
+| TabM — v7 XGB | 0.7299 |
+| TabM — v7 Ensemble | 0.7457 |
+| TabM — rank ensemble | 0.7234 |
+| v7 LGB — v7 XGB (ref) | 0.9650 |
+
+- Diversity criterion (corr < 0.85): **PASS** — 与 GBDT 确实在"看"不同模式
+- 但准确度太低导致多样性无法转化为 ensemble 收益
+
+#### Ensemble 搜索
+
+Grid search over [rank_LGB, rank_XGB, TabM] weights (step=0.05):
+
+| 排名 | rank_LGB | rank_XGB | TabM | OOF |
+|------|---------|---------|------|-----|
+| 1 | 0.40 | 0.60 | **0.00** | 0.6464 |
+| 2 | 0.35 | 0.65 | **0.00** | 0.6464 |
+| 3 | 0.45 | 0.55 | **0.00** | 0.6464 |
+
+- **TabM 最优权重 = 0**，对 ensemble 完全无贡献
+- Best ensemble OOF 与 Exp C rank-only 完全一致（0.6464）
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| DL 在此数据集上限约 0.44-0.45 | 两次 DL 尝试（ResNet 0.42, TabM 0.44）均远不如 GBDT |
+| 预测力主要来自 TE 特征 | DL 无法从原始特征中学到等效信息 |
+| 多样性高但准确度不足 | corr=0.74，但 OOF 差 0.20，无法贡献 ensemble |
+| 不建议继续投入 DL | 除非能引入 TE 特征给 DL（但这消除了多样性优势） |
+
+#### Bug 修复
+
+- GPU 脚本末尾生成 submission CSV 时报错 `ValueError: Usecols... ['id']`
+- 原因：fallback 分支尝试从原始 CSV 读 `id` 列，但该 CSV 无名索引
+- 修复 (commit e46e30f): 改用 `test_df.index`，与 step_h_gpu.py 一致
+- Notebook Section E 同步修复：加 `np.clip(best_ens_test, 0, 1)`
+
+#### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/step_e_gpu.py` | GPU 服务器完整训练脚本 |
+| `step_e_gpu.log` | GPU 运行完整日志 |
+| `models/tabm_oof.npy` | TabM OOF 预测 (6,076,546 rows) |
+| `models/tabm_test.npy` | TabM test 预测 (2,028,750 rows) |
+| `models/tabm_fold{0-4}.pt` | 5 折模型权重（在服务器上，未下载） |
+| `submissions/ensemble_tabm.csv` | TabM 单模型 submission |
+| `submissions/ensemble_e_tabm.csv` | Notebook ensemble 版 (=rank-only, TabM weight=0) |
+| `figures/tabm_correlation.png` | 相关性可视化 |
+| `notebooks/06_sprint.ipynb` Section E | 分析 notebook，带完整输出 |
 
 ---
 

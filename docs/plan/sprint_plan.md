@@ -20,8 +20,9 @@
 | v9a | v9 + M1-5 TE | 0.6326 | 0.5477 | 0.085 | double penalty |
 | v10 | DART Boosting | 0.6406 | not submitted | — | LGB OOF -0.019 |
 | v11 | +NN (weight=0) | 0.6429 | not submitted | — | NN OOF 0.42 |
-| Exp C | Rank-target LGB+XGB | **0.6464** | pending | — | +0.0035 vs v7, replaces v7 |
-| Exp H(a) | Remove noise (tc=1) | **0.6442** | pending | — | +0.0013 vs v7, corr 0.99 |
+| Exp C | Rank-target LGB+XGB | **0.6464** | **0.5698** 🎉 | 0.077 | **NEW BEST**, +0.0062 vs v7 platform |
+| Exp E | TabM DL (ICLR 2025) | 0.4445 | not submitted | — | ❌ OOF too low, weight=0 |
+| Exp H(a) | Remove noise (tc=1) | **0.6442** | 0.5613 ❌ | 0.083 | OOF +0.0013 but platform -0.0023 |
 
 ### Lessons from Steps 8-14
 
@@ -114,30 +115,15 @@ Part 2 — Temporal CV (diagnostic only):
 - Correlation with v7: >0.99 → low diversity, stacking unlikely to help
 - **Pending**: submit `ensemble_ha.csv` to platform for actual score
 
-### Experiment E: TabM Deep Learning Model (GPU, ~2h)
+### Experiment E: TabM Deep Learning Model (GPU, ~2h) ❌ COMPLETED — OOF too low
 
-`notebooks/06_sprint.ipynb` — Section E
+`notebooks/06_sprint.ipynb` — Section E | `scripts/step_e_gpu.py`
 
-**Rationale**: TabM (ICLR 2025) is the current SOTA tabular deep learning model, significantly outperforming TabNet and vanilla MLP/ResNet in recent benchmarks. It uses BatchEnsemble-style parameter sharing to efficiently simulate an MLP ensemble. Much more suitable than the ResNet from Step 14 (OOF 0.42).
-
-**Reference**: Paper 6 (TabM, Gorishniy 2024)
-
-**Why TabM instead of TabNet**:
-- TabNet (2019) is no longer competitive with GBDT in most benchmarks (confirmed by 2024 survey)
-- TabM is simpler (no attention mechanism), yet outperforms TabNet, FT-Transformer, and SAINT
-- Code available at `github.com/yandex-research/tabm`, well-maintained
-
-**Implementation**:
-1. `pip install tabm` or clone from GitHub
-2. Use TabM with BatchEnsemble (k=32 ensemble members)
-3. 5-fold CV, same folds as GBDT
-4. Key hyperparams: `n_blocks=3, d_block=256, dropout=0.1`
-5. sample_weight = log1p(total_count)
-6. Evaluate OOF Spearman and correlation with GBDT
-
-**Expected**: TabM OOF may reach 0.55-0.60 (significantly above ResNet's 0.42), with lower correlation to GBDT (target < 0.85).
-
-**Success criteria**: OOF >= 0.55 AND correlation with v7 ensemble < 0.85
+**Result**: OOF **0.4445** — FAIL (target ≥ 0.55). Diversity PASS (corr 0.7457 < 0.85), but accuracy too low to contribute to ensemble. TabM optimal weight = 0 in grid search.
+- TabM standalone: OOF 0.4445, M1-5 0.4601
+- Best ensemble (rank_LGB + rank_XGB + TabM): OOF 0.6464 (TabM weight = 0, no improvement over Exp C)
+- Two DL attempts (ResNet 0.42, TabM 0.44) confirm DL ceiling on this dataset ~0.44-0.45
+- **Conclusion**: DL not viable for this dataset. Do not invest further in DL direction.
 
 ### Day 2 submissions: Pick best 2 from Experiments C, D, H, E
 
@@ -180,8 +166,8 @@ Part 2 — Temporal CV (diagnostic only):
 1. Build meta-features from all models with OOF > 0.55:
    - LGB v7, XGB v7
    - Rank-target LGB/XGB (if C succeeded)
-   - TabM (if E succeeded)
-   - Noise-handled LGB/XGB (if H succeeded)
+   - ~~TabM~~ (E failed, weight=0)
+   - Noise-handled LGB/XGB (H succeeded)
 2. Layer 2 meta-learner options (5-fold CV):
    - **Ridge Regression** (linear, fast baseline)
    - **LightGBM meta** (100-500 trees, learns non-linear combinations)
@@ -193,9 +179,9 @@ Part 2 — Temporal CV (diagnostic only):
 `notebooks/06_sprint.ipynb` — Section F
 
 **Rationale**: Combine all models/methods with positive signal:
-- Layer 1: LGB v7, XGB v7, Rank-target LGB/XGB, TabM (if effective)
+- Layer 1: LGB v7, XGB v7, Rank-target LGB/XGB, Noise-handled LGB/XGB (from H)
 - Layer 2: Stacking meta-learner or Optuna weight search
-- Optional: adversarial weights from Experiment D
+- Note: TabM excluded (weight=0), AV weights excluded (harmful)
 
 ### Day 3 afternoon: Transition to video production
 
@@ -209,7 +195,7 @@ Part 2 — Temporal CV (diagnostic only):
 | P0 | D: Adversarial Validation | Distribution Alignment | Med | 30 min GPU | + Temporal CV |
 | ✅ | C: Rank-Based Target | Loss Optimization | **+0.0035 OOF** | 1h GPU | Stage 1 done, rank replaces v7 |
 | ✅ | H: Label Noise Handling | Data Quality | **+0.0013 OOF** | 2.5h GPU | (a) Remove best, high corr w/ v7 |
-| P1 | E: TabM (was TabNet) | DL/Tabular SOTA | Med | 2h GPU | TabNet → TabM |
+| ❌ | E: TabM (was TabNet) | DL/Tabular SOTA | OOF 0.4445, weight=0 | 2h GPU | DL ceiling ~0.44 |
 | P1 | G: Pseudo-Labeling | Semi-Supervised | Low-Med | 1h GPU | + curriculum strategy |
 | P2 | B: Stacking Meta-Learner | Ensemble | Conditional | 30 min | depends on C/E/H |
 | P2 | F: Final Ensemble | Combination | Depends | Low | unchanged |
