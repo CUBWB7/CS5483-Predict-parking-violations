@@ -164,7 +164,8 @@ Part 2 — Temporal CV (diagnostic only):
 | H models (noise removal) | 0.6442 | 0.5613 | ❌ | Platform hurt despite OOF gain |
 | TabM | 0.4445 | — | ❌ | Weight=0 in all grid searches |
 
-**Implementation**: Optuna weight search over included models (step=0.01), submit best OOF combination.
+**Result**: Strategy 1 (Exp C rank-only) selected. LGB=0.39, XGB=0.61, OOF=0.6464, M1-5=0.6527.
+Exp G excluded (OOF 0.6463 < threshold 0.6464 by 0.0001). Final file: `submissions/ensemble_final.csv`.
 
 ### Day 3 afternoon: Transition to video production
 
@@ -179,7 +180,7 @@ Part 2 — Temporal CV (diagnostic only):
 | ✅ | H: Label Noise Handling | Data Quality | OOF +0.0013, Platform **0.5613** ❌ | Done — excluded from final |
 | ✅ | E: TabM DL | SOTA Tabular DL | OOF **0.4445**, weight=0 | Done — DL ceiling ~0.44 |
 | ✅ | G: Pseudo-Labeling | Semi-Supervised | OOF 0.6463 (-0.0001) — **null result** | Done — excluded (threshold/range mismatch) |
-| **P0** | **F: Final Ensemble** | Combination | rank C + Exp G (if passes) | After G |
+| ✅ | F: Final Ensemble | Combination | OOF **0.6464**, LGB=0.39 XGB=0.61 — Exp C rank-only | Done — `ensemble_final.csv` generated |
 | ~~P2~~ | ~~B: Stacking~~ | ~~Meta-Learner~~ | — | ~~SKIP~~ (corr >0.99, no diversity) |
 | ~~P0~~ | ~~A: M1-5 Weight Opt.~~ | ~~Ensemble~~ | — | ~~SKIP~~ (superseded by Exp C) |
 

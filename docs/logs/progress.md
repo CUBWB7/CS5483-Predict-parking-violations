@@ -1476,41 +1476,49 @@ Safety check: ✓ PASS（Layer 1 OOF 0.6463 ≥ 阈值 0.6434）
 
 ---
 
-### Sprint Experiment F — Final Ensemble Combination ⏳ 待运行
+### Sprint Experiment F — Final Ensemble Combination ✅ COMPLETED
 
 **日期**: 2026-04-10  
-**状态**: Exp G 已完成，可在本地 notebook 直接运行  
-**Notebook**: `notebooks/06_sprint.ipynb` Section F（自包含，无需 GPU，< 1 min）
+**状态**: 完成，最终提交文件已生成  
+**Notebook**: `notebooks/06_sprint.ipynb` Section F（本地 CPU，< 1 min）
 
 #### 核心思路
 
-根据 sprint_plan.md 的 model inclusion 规则，仅将 **有 platform 收益** 的模型纳入最终 ensemble：
-- Exp C rank LGB/XGB（platform 0.5698，new best）— ✅ 必选
-- Exp G pseudo-label 模型 — ✅ 当且仅当 OOF ≥ 0.6464
-- v7 LGB/XGB — ❌ 被 rank-target 完全超越
-- Exp H 模型 — ❌ platform 0.5613 < 0.5698
-- TabM — ❌ weight=0
+仅纳入有 platform 收益的模型，对 Exp C rank LGB/XGB 进行精细权重搜索（step=0.01 vs Exp C 脚本的 step=0.05），并条件性加入 Exp G（阈值 OOF ≥ 0.6464）。
 
-**Two strategies searched**:
-1. Exp C rank-only（1-D weight search, step=0.01）
-2. C + G blend（1-D weight search on C-ens vs G-ens, step=0.01；仅当 G 达标）
+#### 实验结果
 
-#### 使用方式
+| 策略 | OOF | M1-5 | 决策 |
+|------|-----|------|------|
+| Exp C LGB 单模型 | 0.6373 | 0.6440 | — |
+| Exp C XGB 单模型 | 0.6430 | 0.6486 | — |
+| **Strategy 1: Exp C rank ensemble** | **0.6464** | **0.6527** | ✅ 最终选择 |
+| Exp G Layer 1（参考） | 0.6463 | 0.6525 | ✗ OOF 低于阈值 0.6464 |
+| Strategy 2: C+G blend | — | — | 未触发（G 不达标）|
 
-在 notebook 中运行 Section F cells（自包含，从磁盘加载 .npy 文件）。
-纯 weight search，无模型训练，本地 CPU < 1 min。
+**最终权重**：LGB=0.39，XGB=0.61（精搜从 step=0.05 的 LGB=0.40 微调，OOF 不变）
+
+#### 分析
+
+Exp F 无法超越 Exp C，原因：
+1. Exp G OOF=0.6463 比阈值 0.6464 低 0.0001，`_g_qualifies=False`，Strategy 2 未触发
+2. 精细权重搜索（step=0.01）未找到比 Exp C 更好的组合，OOF 维持 0.6464
+3. `ensemble_final.csv` 实质上是用更精细权重重生成的 Exp C，与已提交的 `ensemble_c_rank.csv` 几乎等价
+
+**最终结论：Platform 0.5698（Exp C）是本次 Sprint 天花板。** 所有可行方向均已探索完毕：
+- rank-target 方向（Exp C）✅ 最优
+- pseudo-labeling（Exp G）❌ null result（threshold/range 不匹配）
+- label noise 去除（Exp H）❌ platform 反降
+- 深度学习（Exp E）❌ OOF 上限 0.44
+- AV 加权（Exp D）❌ 相当于丢弃大量训练样本
 
 #### 产出文件
 
 | 文件 | 说明 |
 |------|------|
-| `submissions/ensemble_final.csv` | 最终提交文件（最佳 OOF 组合） |
+| `submissions/ensemble_final.csv` | 最终提交文件（OOF=0.6464，LGB=0.39，XGB=0.61）|
 | `submissions/ensemble_f_expC.csv` | Exp C baseline 参考提交 |
-| `notebooks/06_sprint.ipynb` Section F | 分析 + 可视化 notebook |
-
-#### 结果（待更新）
-
-- 在本地运行 Section F 后更新
+| `notebooks/06_sprint.ipynb` Section F | 完整分析 + 权重搜索可视化 |
 
 ---
 
