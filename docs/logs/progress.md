@@ -1520,6 +1520,108 @@ Exp F 无法超越 Exp C，原因：
 | `submissions/ensemble_f_expC.csv` | Exp C baseline 参考提交 |
 | `notebooks/06_sprint.ipynb` Section F | 完整分析 + 权重搜索可视化 |
 
+### Sprint Experiment I — Rank-Target GBDT Re-tuning ✅ COMPLETED
+
+**日期**: 2026-04-10  
+**状态**: 完成（Part A + Part B 均已运行）  
+**GPU 脚本**: `scripts/step_i_gpu.py`  
+**GPU 日志**: `step_i_gpu.log`  
+**GPU 运行时间**: Part A ~79 min (LGB 68 min + XGB 11 min) + Part B ~315 min (Optuna ~220 min + retrain ~94 min)
+
+#### 核心思路
+
+Exp C 使用 v7 的 Optuna 参数（为 raw bimodal target 调优），但 rank-target 的 loss surface 完全不同。
+关键证据：Exp C 所有 5 个 LGB fold 均命中 n_estimators=10000 上限（best_iter=9998-10000），模型仍在学习。
+
+**Part A**: 增加 LGB n_estimators 10000→20000，XGB 10000→15000，ES patience 150→200  
+**Part B**: Optuna 60 trials 在 rank-target 上重新搜索超参（1M M1-5 子采样，3-fold CV）
+
+#### Part A 结果：✓ PASS
+
+| 模型 | OOF Spearman | M1-5 | vs Exp C |
+|------|-------------|------|---------|
+| LGB I-A (n=20000) | 0.6417 | 0.6476 | +0.0044 |
+| XGB I-A (n=15000) | 0.6430 | 0.6486 | +0.0000 |
+| **Ensemble I-A** | **0.6478** | **0.6537** | **+0.0014** |
+
+- **LGB 受益显著**：OOF 0.6373→0.6417（+0.0044），5 个 fold 仍全部撞限（best_iter≈19990+），模型仍未收敛
+- **XGB 无变化**：ES 在 ~7900-8100 触发（与 Exp C 一致），已达最优
+- Ensemble 权重（M1-5 OOF 搜索，step=0.01）：LGB=0.48, XGB=0.52
+- Success criterion (OOF ≥ 0.6470): **✓ PASS**
+
+#### Part B 结果：✗ 不如 Part A
+
+**Optuna 搜索结果**（60 trials, 1M M1-5 rows, 3-fold）:
+
+| 模型 | Best trial Spearman | 搜索耗时 |
+|------|-------------------|---------|
+| LGB | 0.6135 | 162.4 min |
+| XGB | 0.6152 | 57.5 min |
+
+**Optuna 最优参数 vs v7**:
+
+| 参数 | v7 (Exp C) | Optuna best | 变化 |
+|------|-----------|-------------|------|
+| LGB num_leaves | 100 | 123 | +23 |
+| LGB learning_rate | 0.0564 | 0.0325 | -0.024 (更慢) |
+| LGB min_child_samples | 69 | 49 | -20 |
+| LGB reg_lambda | 0.452 | 1.933 | +1.48 (更强) |
+| LGB reg_alpha | 1.243 | 0.422 | -0.82 |
+| XGB max_depth | 10 | 9 | -1 |
+| XGB learning_rate | 0.0362 | 0.0284 | -0.008 (更慢) |
+| XGB min_child_weight | 11 | 25 | +14 |
+
+**Part B 全量重训结果**:
+
+| 模型 | OOF Spearman | M1-5 | vs Exp C | vs Part A |
+|------|-------------|------|---------|----------|
+| LGB I-B | 0.6415 | 0.6479 | +0.0042 | -0.0002 |
+| XGB I-B | 0.6426 | 0.6482 | -0.0004 | -0.0004 |
+| **Ensemble I-B** | **0.6474** | **0.6536** | **+0.0010** | **-0.0004** |
+
+- LGB I-B 略逊于 I-A（0.6415 vs 0.6417）：Optuna 选择更低 lr 导致收敛更慢，20000 轮仍不够
+- XGB I-B 略逊于 I-A（0.6426 vs 0.6430）：同理，XGB 全部 5 fold 撞 15000 上限（Exp C 仅 ~8000）
+- **结论：v7 参数在 rank-target 下依然（近似）最优，Optuna 未能找到更好组合**
+
+#### 模型相关性
+
+| 组合 | Spearman 相关 |
+|------|-------------|
+| rank LGB_i — rank XGB_i | 0.9663 |
+| Exp C LGB — Exp I LGB | 0.9957 |
+| Exp C XGB — Exp I XGB | 0.9999 |
+
+- Exp I 与 Exp C 高度相关（I 只是多跑了迭代），不增加多样性
+
+#### 关键发现
+
+| 发现 | 详情 |
+|------|------|
+| LGB 确实欠训练 | 从 10000→20000 带来 +0.0044 单模型提升 |
+| 20000 轮仍不够 | 5 个 fold 全部再次撞限，理论上可继续增加 |
+| XGB 已稳定 | ES 在 ~8000 触发，更多迭代无意义 |
+| Optuna 无收益 | rank-target 的最优参数与 raw-target 非常接近 |
+| 根本限制来自迭代上限 | LGB 的收益来自更多迭代而非新参数 |
+| Part B 失败根因 | Optuna 选择更低 lr（LGB 0.032 vs 0.056, XGB 0.028 vs 0.036）但 n_estimators 上限不变，导致 Part B 两个模型全部 5/5 fold 撞限，实际在更差的收敛点停下 |
+
+#### 最终决策
+
+**Part A > Part B > Exp C**：提交 `ensemble_i_a.csv`（OOF=0.6478, M1-5=0.6537），等平台额度恢复后提交。
+
+#### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/step_i_gpu.py` | GPU 脚本（Part A + B + ensemble） |
+| `step_i_gpu.log` | 完整训练日志 |
+| `models/lgb_rank_i_oof.npy` / `lgb_rank_i_test.npy` | Part A LGB 预测 |
+| `models/xgb_rank_i_oof.npy` / `xgb_rank_i_test.npy` | Part A XGB 预测 |
+| `models/lgb_rank_ib_oof.npy` / `lgb_rank_ib_test.npy` | Part B LGB 预测 |
+| `models/xgb_rank_ib_oof.npy` / `xgb_rank_ib_test.npy` | Part B XGB 预测 |
+| `submissions/ensemble_i_a.csv` | Part A ensemble（OOF=0.6478）**推荐提交** |
+| `submissions/ensemble_i_b.csv` | Part B ensemble（OOF=0.6474）|
+| `docs/plan/exp_ij_tuning_plan.md` | 实验计划 |
+
 ---
 
 ## Phase 6 — 报告

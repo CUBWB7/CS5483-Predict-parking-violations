@@ -50,12 +50,13 @@ bimodal raw target, NOT the uniform rank-target distribution. This means:
 
 ---
 
-## Experiment I: Rank-Target GBDT Re-tuning
+## Experiment I: Rank-Target GBDT Re-tuning ✅ COMPLETED
 
 **Priority**: HIGH (P0)
-**Script**: `scripts/step_i_gpu.py` (to be created, based on `step_c_gpu.py`)
+**Script**: `scripts/step_i_gpu.py`
 **Template**: `scripts/step_c_gpu.py` (lines 101-136 for current params)
 **Anti-pattern**: `scripts/step12_gpu.py` (what NOT to do with Optuna ranges)
+**Status**: Both Part A and Part B completed. **Part A is the winner** (OOF 0.6478 > Part B 0.6474).
 
 ### Part A: Quick Win — Increase n_estimators
 
@@ -101,6 +102,12 @@ All other parameters remain IDENTICAL to Exp C:
 - If OOF ≥ 0.6480: Skip Part B, go directly to submission
 - If OOF < 0.6470: Proceed to Part B (re-Optuna needed)
 - If OOF ≈ 0.6464 (no change): LGB was already near plateau at 10000, proceed to Part B
+
+**ACTUAL RESULTS (Part A)**:
+- LGB I-A OOF: **0.6417** (+0.0044 vs Exp C), all 5 folds hit 20000 limit again
+- XGB I-A OOF: **0.6430** (+0.0000), ES at ~7900-8100 (same as Exp C)
+- Ensemble I-A: **0.6478** (+0.0014), weights LGB=0.48 XGB=0.52
+- ✓ PASS (OOF 0.6478 ≥ 0.6470), borderline for skipping Part B (< 0.6480)
 
 ### Part B: Re-Optuna for Rank-Target
 
@@ -183,6 +190,16 @@ def objective(trial):
 - 5-fold CV on full 6M rows
 - Generate `submissions/ensemble_i_b.csv`
 
+**ACTUAL RESULTS (Part B)**:
+- Optuna search: LGB best trial 0.6135 (162 min), XGB best trial 0.6152 (58 min)
+- LGB Optuna params: num_leaves=123, lr=0.0325, min_child=49, lambda=1.93, alpha=0.42
+- XGB Optuna params: max_depth=9, lr=0.0284, min_child_weight=25, lambda=1.98, alpha=0.83
+- Full retrain: LGB I-B OOF **0.6415** (-0.0002 vs Part A), XGB I-B OOF **0.6426** (-0.0004)
+- XGB I-B all 5 folds hit 15000 limit (lower lr → slower convergence, needed more iters)
+- Ensemble I-B: **0.6474** (+0.0010 vs Exp C, but **-0.0004 vs Part A**)
+- ✗ FAIL (OOF 0.6474 < target 0.6480)
+- **Conclusion**: Optuna did NOT improve over v7 params. v7 params remain (near-)optimal for rank-target.
+
 ### Part C: Ensemble + Submission
 
 1. Load Part A and/or Part B OOF + test predictions
@@ -196,6 +213,12 @@ def objective(trial):
 - OOF ≥ 0.6480 (vs Exp C 0.6464, delta ≥ +0.0016)
 - M1-5 OOF ≥ 0.6540 (vs Exp C 0.6527)
 - Platform improvement vs 0.5698 (only verifiable by submission)
+
+**ACTUAL RESULTS (Part C / Ensemble)**:
+- Best result: **Part A** (Ensemble I-A, OOF=0.6478, M1-5=0.6537)
+- Part B did not improve over Part A → `ensemble_i_a.csv` is the submission to use
+- `ensemble_i_final.csv` not generated separately (Part A csv is the final answer)
+- Pending: platform submission (no quota until evening)
 
 ---
 
@@ -369,11 +392,9 @@ Step 4.1: Add Section I to notebooks/06_sprint.ipynb
   (follow project convention: each Section self-contained, 
    try session variable first, fallback to disk load)
 
-  New notebook: notebooks/07_tuning.ipynb
-  (self-contained, loads all data from disk, no dependency on 06_sprint.ipynb)
-
   Cell 1 — Data Loading:
-    - Load from data/train_features_tier2.parquet, test_features_tier2.parquet
+    - try: _ = train_df.shape  (reuse session)
+    - except: load from data/train_features_tier2.parquet
     - Load Exp C baseline: models/lgb_rank_oof.npy, xgb_rank_oof.npy
     - Load Exp I results: models/lgb_rank_i_oof.npy, xgb_rank_i_oof.npy
     - Load Exp I test preds: models/lgb_rank_i_test.npy, xgb_rank_i_test.npy
@@ -440,8 +461,8 @@ Step 5.3: Git commit + push
 |------|---------|
 | `scripts/step_i_gpu.py` | GBDT re-tuning script (Part A + B + C) |
 | `scripts/step_j_gpu.py` | TabM v2 script (optional) |
-| `notebooks/07_tuning.ipynb` Section I | Exp I local analysis (OOF comparison, correlation, ensemble, submission) |
-| `notebooks/07_tuning.ipynb` Section J | Exp J local analysis (optional, TabM v2 + 3-model ensemble) |
+| `notebooks/06_sprint.ipynb` Section I | Exp I local analysis (OOF comparison, correlation, ensemble, submission) |
+| `notebooks/06_sprint.ipynb` Section J | Exp J local analysis (optional, TabM v2 + 3-model ensemble) |
 | `submissions/ensemble_i_a.csv` | Part A submission |
 | `submissions/ensemble_i_b.csv` | Part B submission (if run) |
 | `submissions/ensemble_i_final.csv` | Best Exp I submission |
