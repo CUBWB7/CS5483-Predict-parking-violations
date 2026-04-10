@@ -1384,9 +1384,11 @@ Grid search over [rank_LGB, rank_XGB, TabM] weights (step=0.05):
 | 发现 | 详情 |
 |------|------|
 | DL 在此数据集上限约 0.44-0.45 | 两次 DL 尝试（ResNet 0.42, TabM 0.44）均远不如 GBDT |
-| 预测力主要来自 TE 特征 | DL 无法从原始特征中学到等效信息 |
-| 多样性高但准确度不足 | corr=0.74，但 OOF 差 0.20，无法贡献 ensemble |
-| 不建议继续投入 DL | 除非能引入 TE 特征给 DL（但这消除了多样性优势） |
+| **预测方差被严重压缩** | TabM std=0.187 vs 目标 std=0.368（仅一半），预测缩向均值 → 排名区分力不足 |
+| 10 特征 + 整数主力因子 = 不利于 DL | total_count 是整数计数器，GBDT 用 tree split 天然处理；DL 缺乏足够特征宽度学习非线性交互 |
+| MSE loss 不直接优化 Spearman | Exp C rank-target 直接优化排名；TabM 用 MSE 被 tc=1 极端值（y∈{0,1}）主导，干扰中间值排名 |
+| 多样性高但准确度不足 | corr=0.74，但 OOF 差 0.20，任何正权重都会降低 ensemble 分 |
+| 不建议继续投入 DL | 两次独立实验撞上同一天花板，属结构性上限而非 hyperparameter 问题 |
 
 #### Bug 修复
 
@@ -1408,6 +1410,82 @@ Grid search over [rank_LGB, rank_XGB, TabM] weights (step=0.05):
 | `submissions/ensemble_e_tabm.csv` | Notebook ensemble 版 (=rank-only, TabM weight=0) |
 | `figures/tabm_correlation.png` | 相关性可视化 |
 | `notebooks/06_sprint.ipynb` Section E | 分析 notebook，带完整输出 |
+
+### Sprint Experiment G — Pseudo-Labeling with Curriculum Strategy ⏳ GPU Running
+
+**日期**: 2026-04-10  
+**状态**: GPU 脚本正在服务器上运行中  
+**Notebook**: `notebooks/06_sprint.ipynb` Section G  
+**GPU 脚本**: `scripts/step_g_gpu.py`
+
+#### 核心思路
+
+测试集仅含 M1-5，而训练集涵盖全年。Adversarial Validation（Section D）确认分布差异极显著（AUC≈1.0）。
+以高置信度的 test 预测作为伪标签加入训练集，使模型获得更多 M1-5 样本——直接针对 gap 根本原因。
+基线：Exp C rank-target ensemble（OOF 0.6464, Platform 0.5698）。
+
+**Curriculum 策略**:
+- Layer 1（高置信）: `rank_test_avg < 0.02 or > 0.98`，weight=0.7
+- Layer 2（中置信）: `0.10 > or < 0.90`（排除 Layer 1），weight=0.3；仅在 Layer 1 OOF ≥ 0.6434 时运行
+
+#### 预期产出文件（待服务器下载后确认）
+
+| 文件 | 说明 |
+|------|------|
+| `models/lgb_g1_oof.npy` / `lgb_g1_test.npy` | Layer 1 LGB 预测 |
+| `models/xgb_g1_oof.npy` / `xgb_g1_test.npy` | Layer 1 XGB 预测 |
+| `models/lgb_g2_oof.npy` / `lgb_g2_test.npy` | Layer 2 LGB 预测（如果运行） |
+| `models/xgb_g2_oof.npy` / `xgb_g2_test.npy` | Layer 2 XGB 预测（如果运行） |
+| `submissions/ensemble_g1.csv` | Layer 1 提交文件 |
+| `submissions/ensemble_g2.csv` | Layer 2 提交文件（如果运行） |
+| `step_g_gpu.log` | 完整训练日志 |
+
+---
+
+### Sprint Experiment F — Final Ensemble Combination ⏳ 待运行
+
+**日期**: 2026-04-10  
+**状态**: 脚本已创建，待 Exp G 完成后运行  
+**Notebook**: `notebooks/06_sprint.ipynb` Section F（自包含，可独立运行）  
+**GPU 脚本**: `scripts/step_f_gpu.py`（无训练，纯 weight search，< 1 min）
+
+#### 核心思路
+
+根据 sprint_plan.md 的 model inclusion 规则，仅将 **有 platform 收益** 的模型纳入最终 ensemble：
+- Exp C rank LGB/XGB（platform 0.5698，new best）— ✅ 必选
+- Exp G pseudo-label 模型 — ✅ 当且仅当 OOF ≥ 0.6464
+- v7 LGB/XGB — ❌ 被 rank-target 完全超越
+- Exp H 模型 — ❌ platform 0.5613 < 0.5698
+- TabM — ❌ weight=0
+
+**Two strategies searched**:
+1. Exp C rank-only（1-D weight search, step=0.01）
+2. C + G blend（1-D weight search on C-ens vs G-ens, step=0.01；仅当 G 达标）
+
+#### 使用方式
+
+**在服务器上运行（推荐）**：Exp G 完成后直接运行：
+```
+python scripts/step_f_gpu.py
+```
+生成 `submissions/ensemble_final.csv`，下载到本地。
+
+**在 notebook 中分析**：下载 Exp G 的 `.npy` 文件后，运行 Section F cells（自包含）。
+若 Exp G 文件尚未下载，Section F 自动退化为 Exp C rank-only，并打印提醒。
+
+#### 产出文件
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/step_f_gpu.py` | 最终 ensemble weight search 脚本 |
+| `submissions/ensemble_final.csv` | 最终提交文件（最佳 OOF 组合） |
+| `submissions/ensemble_f_expC.csv` | Exp C baseline 参考提交 |
+| `step_f_gpu.log` | 运行日志 |
+| `notebooks/06_sprint.ipynb` Section F | 分析 notebook |
+
+#### 结果（待更新）
+
+- 待 Exp G 完成并运行 step_f_gpu.py 后更新
 
 ---
 
