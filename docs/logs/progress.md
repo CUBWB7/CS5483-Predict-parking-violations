@@ -1411,12 +1411,13 @@ Grid search over [rank_LGB, rank_XGB, TabM] weights (step=0.05):
 | `figures/tabm_correlation.png` | 相关性可视化 |
 | `notebooks/06_sprint.ipynb` Section E | 分析 notebook，带完整输出 |
 
-### Sprint Experiment G — Pseudo-Labeling with Curriculum Strategy ⏳ GPU Running
+### Sprint Experiment G — Pseudo-Labeling with Curriculum Strategy ✅ COMPLETED — Null Result
 
 **日期**: 2026-04-10  
-**状态**: GPU 脚本正在服务器上运行中  
+**状态**: 完成，**null result**（OOF 无提升，不进入最终 ensemble）  
 **Notebook**: `notebooks/06_sprint.ipynb` Section G  
-**GPU 脚本**: `scripts/step_g_gpu.py`
+**GPU 脚本**: `scripts/step_g_gpu.py`  
+**GPU 日志**: `step_g_gpu.log`
 
 #### 核心思路
 
@@ -1426,18 +1427,51 @@ Grid search over [rank_LGB, rank_XGB, TabM] weights (step=0.05):
 
 **Curriculum 策略**:
 - Layer 1（高置信）: `rank_test_avg < 0.02 or > 0.98`，weight=0.7
-- Layer 2（中置信）: `0.10 > or < 0.90`（排除 Layer 1），weight=0.3；仅在 Layer 1 OOF ≥ 0.6434 时运行
+- Layer 2（中置信）: `0.10 > or < 0.90`（排除 Layer 1），weight=0.3
 
-#### 预期产出文件（待服务器下载后确认）
+#### 实验结果
+
+| 模型 | OOF Spearman | M1-5 | vs Exp C |
+|------|-------------|------|---------|
+| Exp C Ensemble（基准） | 0.6464 | 0.6527 | — |
+| Layer 1 LGB | 0.6373 | 0.6440 | -0.0000 |
+| Layer 1 XGB | 0.6430 | 0.6485 | -0.0000 |
+| **Layer 1 Ensemble** | **0.6463** | 0.6525 | **-0.0001** |
+| Layer 2 LGB | 0.6369 | 0.6436 | -0.0004 |
+| Layer 2 XGB | 0.6430 | 0.6485 | -0.0000 |
+| **Layer 2 Ensemble** | **0.6462** | 0.6524 | **-0.0002** |
+
+Safety check: ✓ PASS（Layer 1 OOF 0.6463 ≥ 阈值 0.6434）
+
+#### 根本原因分析：Null Result 的成因
+
+**Pseudo-label 数量极少（近乎为零）**：
+- rank_test_avg 实际范围：[0.0254, 1.0045]
+- Layer 1 阈值（< 0.02 or > 0.98）筛出：**1 个**（占 test 的 0.00%）
+- Layer 2 阈值（< 0.10 or > 0.90）筛出：198 个（占 test 的 0.01%）
+- 两层合计：**199 个 pseudo-label** / 2,028,750 行 test
+
+**根本原因**：Exp C 使用 rank-target 训练，训练集 y_rank 的实际范围被压缩在 [0.079, 0.867] 之间（见 step_c_gpu.log）。模型以此范围内的值进行预测，导致测试预测几乎不可能超出此范围，自然无法满足 < 0.02 或 > 0.98 的高置信阈值。这是 **threshold 设计与 rank-target prediction range 的结构性不匹配**——如果使用 raw invalid_ratio 预测（范围 0/1）则阈值设计成立，但 rank-target 预测天然被压缩。
+
+即便 199 个 pseudo-label 被加入 607 万行训练集，比例仅为 0.003%，统计上没有任何作用。
+
+#### 结论与决策
+
+- **不提交 Exp G 文件**（与 Exp C 几乎相同，没有意义）
+- **不纳入最终 ensemble**（OOF 降低而非提升）
+- **Exp G null result 本身有科研价值**：证明了 rank-target 的预测范围压缩特性会破坏标准 pseudo-labeling 阈值设计，为后续工作提供警示
+- **Exp C（Platform 0.5698）维持最高分**，Exp F 将以此为核心
+
+#### 产出文件
 
 | 文件 | 说明 |
 |------|------|
-| `models/lgb_g1_oof.npy` / `lgb_g1_test.npy` | Layer 1 LGB 预测 |
-| `models/xgb_g1_oof.npy` / `xgb_g1_test.npy` | Layer 1 XGB 预测 |
-| `models/lgb_g2_oof.npy` / `lgb_g2_test.npy` | Layer 2 LGB 预测（如果运行） |
-| `models/xgb_g2_oof.npy` / `xgb_g2_test.npy` | Layer 2 XGB 预测（如果运行） |
-| `submissions/ensemble_g1.csv` | Layer 1 提交文件 |
-| `submissions/ensemble_g2.csv` | Layer 2 提交文件（如果运行） |
+| `models/g1_lgb_oof.npy` / `g1_lgb_test.npy` | Layer 1 LGB 预测 |
+| `models/g1_xgb_oof.npy` / `g1_xgb_test.npy` | Layer 1 XGB 预测 |
+| `models/g2_lgb_oof.npy` / `g2_lgb_test.npy` | Layer 2 LGB 预测 |
+| `models/g2_xgb_oof.npy` / `g2_xgb_test.npy` | Layer 2 XGB 预测 |
+| `submissions/ensemble_g1.csv` | Layer 1 提交文件（不提交至平台）|
+| `submissions/ensemble_g2.csv` | Layer 2 提交文件（不提交至平台）|
 | `step_g_gpu.log` | 完整训练日志 |
 
 ---
@@ -1445,9 +1479,8 @@ Grid search over [rank_LGB, rank_XGB, TabM] weights (step=0.05):
 ### Sprint Experiment F — Final Ensemble Combination ⏳ 待运行
 
 **日期**: 2026-04-10  
-**状态**: 脚本已创建，待 Exp G 完成后运行  
-**Notebook**: `notebooks/06_sprint.ipynb` Section F（自包含，可独立运行）  
-**GPU 脚本**: `scripts/step_f_gpu.py`（无训练，纯 weight search，< 1 min）
+**状态**: Exp G 已完成，可在本地 notebook 直接运行  
+**Notebook**: `notebooks/06_sprint.ipynb` Section F（自包含，无需 GPU，< 1 min）
 
 #### 核心思路
 
@@ -1464,28 +1497,20 @@ Grid search over [rank_LGB, rank_XGB, TabM] weights (step=0.05):
 
 #### 使用方式
 
-**在服务器上运行（推荐）**：Exp G 完成后直接运行：
-```
-python scripts/step_f_gpu.py
-```
-生成 `submissions/ensemble_final.csv`，下载到本地。
-
-**在 notebook 中分析**：下载 Exp G 的 `.npy` 文件后，运行 Section F cells（自包含）。
-若 Exp G 文件尚未下载，Section F 自动退化为 Exp C rank-only，并打印提醒。
+在 notebook 中运行 Section F cells（自包含，从磁盘加载 .npy 文件）。
+纯 weight search，无模型训练，本地 CPU < 1 min。
 
 #### 产出文件
 
 | 文件 | 说明 |
 |------|------|
-| `scripts/step_f_gpu.py` | 最终 ensemble weight search 脚本 |
 | `submissions/ensemble_final.csv` | 最终提交文件（最佳 OOF 组合） |
 | `submissions/ensemble_f_expC.csv` | Exp C baseline 参考提交 |
-| `step_f_gpu.log` | 运行日志 |
-| `notebooks/06_sprint.ipynb` Section F | 分析 notebook |
+| `notebooks/06_sprint.ipynb` Section F | 分析 + 可视化 notebook |
 
 #### 结果（待更新）
 
-- 待 Exp G 完成并运行 step_f_gpu.py 后更新
+- 在本地运行 Section F 后更新
 
 ---
 

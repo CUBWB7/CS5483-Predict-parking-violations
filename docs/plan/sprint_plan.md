@@ -23,6 +23,7 @@
 | Exp C | Rank-target LGB+XGB | **0.6464** | **0.5698** 🎉 | 0.077 | **NEW BEST**, +0.0062 vs v7 platform |
 | Exp E | TabM DL (ICLR 2025) | 0.4445 | not submitted | — | ❌ OOF too low, weight=0 |
 | Exp H(a) | Remove noise (tc=1) | **0.6442** | 0.5613 ❌ | 0.083 | OOF +0.0013 but platform -0.0023 |
+| Exp G L1 | Pseudo-label (199 rows) | 0.6463 | — | — | Null result — threshold/range mismatch |
 
 ### Lessons from Steps 8-14
 
@@ -131,57 +132,39 @@ Part 2 — Temporal CV (diagnostic only):
 
 ## Day 3 (4/10) — Combine Best + Transition to Report
 
-### Experiment G: Pseudo-Labeling with Curriculum Strategy (GPU, ~1h)
+### Experiment G: Pseudo-Labeling with Curriculum Strategy ✅ COMPLETED — Null Result
 
-`notebooks/06_sprint.ipynb` — Section G
+`notebooks/06_sprint.ipynb` — Section G | `scripts/step_g_gpu.py`
 
-**Rationale**: Use confident test predictions as pseudo-labels to augment training. Since test is M1-5 only, this adds more M1-5 data for training — directly addressing the distribution imbalance. Curriculum approach (high confidence first, then medium) reduces confirmation bias.
+**Result**: Null result. Layer 1 OOF **0.6463** (-0.0001 vs Exp C), Layer 2 OOF **0.6462** (-0.0002). Safety ✓ PASS but no improvement.
 
-**Reference**: Paper 4 (Revisiting Self-Training 2023)
+**Root cause of failure**: rank-target training compresses prediction range to [0.079, 0.867]. Test predictions cannot reach the < 0.02 or > 0.98 thresholds structurally. Only **1 row** selected for Layer 1 (0.00%), 199 rows total — statistically zero impact on 6.07M training rows.
 
-**Implementation** (curriculum, not simple thresholding):
-1. Layer 1 — High confidence pseudo-labels:
-   - Select v7 test predictions where < 0.02 or > 0.98
-   - Add to training set with weight = 0.7
-   - Retrain LGB + XGB (v7 params)
-2. Layer 2 — Medium confidence (optional):
-   - Use Layer 1 model to re-predict test
-   - Add predictions where < 0.10 or > 0.90 (excluding Layer 1 samples)
-   - Weight = 0.3
-   - Retrain again
-3. Evaluate OOF on **original train only** (exclude pseudo-labels)
-4. **Safety check**: if OOF drops > 0.003 after adding pseudo-labels, abort immediately
+**Key finding**: Standard pseudo-labeling thresholds designed for raw [0,1] predictions are **incompatible with rank-target models**. The threshold should have been adapted to the actual prediction range (e.g., < 0.15 or > 0.85). This is a design-stage mismatch, not a training issue.
 
-**Success criteria**: OOF >= 0.6429 with pseudo-labels (no degradation)
+**Decision**: Exp G models excluded from Exp F ensemble (OOF degradation, not improvement).
 
-### Experiment B: Stacking Meta-Learner (Local, ~30min)
+### Experiment B: Stacking Meta-Learner ← SKIP
 
-`notebooks/06_sprint.ipynb` — Section B
-
-**Rationale**: Only worth doing if Experiments C, E, or H produced new effective models. Simple weighted average assumes linear additivity, but meta-learners can capture non-linear interactions.
-
-**Precondition**: At least 3 models with non-zero ensemble weight available.
-
-**Implementation**:
-1. Build meta-features from all models with OOF > 0.55:
-   - LGB v7, XGB v7
-   - Rank-target LGB/XGB (if C succeeded)
-   - ~~TabM~~ (E failed, weight=0)
-   - Noise-handled LGB/XGB (H succeeded)
-2. Layer 2 meta-learner options (5-fold CV):
-   - **Ridge Regression** (linear, fast baseline)
-   - **LightGBM meta** (100-500 trees, learns non-linear combinations)
-3. Compare meta OOF Spearman vs simple weighted average
-4. If meta-learner > weighted average by >= 0.001, use meta-learner for submission
+**Decision**: Skip. All effective models (rank LGB, rank XGB) correlate >0.99 with each other and with v7. Stacking cannot extract diversity that doesn't exist. Exp H models hurt on platform despite OOF gain — including them in a meta-learner would propagate the damage.
 
 ### Experiment F: Final Ensemble Combination
 
 `notebooks/06_sprint.ipynb` — Section F
 
-**Rationale**: Combine all models/methods with positive signal:
-- Layer 1: LGB v7, XGB v7, Rank-target LGB/XGB, Noise-handled LGB/XGB (from H)
-- Layer 2: Stacking meta-learner or Optuna weight search
-- Note: TabM excluded (weight=0), AV weights excluded (harmful)
+**Rationale**: Lock in the best submission using models with proven platform gains.
+
+**Model inclusion decision**:
+| Model | OOF | Platform | Include? | Reason |
+|-------|-----|----------|---------|--------|
+| rank LGB (Exp C) | 0.6373 | — | ✅ | Core model |
+| rank XGB (Exp C) | 0.6430 | — | ✅ | Core model |
+| pseudo-label LGB/XGB (Exp G) | 0.6463 | — | ❌ | OOF -0.0001, null result, excluded |
+| v7 LGB/XGB | 0.6336/0.6403 | — | ❌ | Dominated by rank-target |
+| H models (noise removal) | 0.6442 | 0.5613 | ❌ | Platform hurt despite OOF gain |
+| TabM | 0.4445 | — | ❌ | Weight=0 in all grid searches |
+
+**Implementation**: Optuna weight search over included models (step=0.01), submit best OOF combination.
 
 ### Day 3 afternoon: Transition to video production
 
@@ -189,16 +172,16 @@ Part 2 — Temporal CV (diagnostic only):
 
 ## Experiment Priority (Revised)
 
-| Priority | Experiment | Method | Expected Benefit | Cost | Change from v1 |
-|----------|------------|--------|-----------------|------|-----------------|
-| P0 | A: M1-5 Weight Optimization | Ensemble | Low-Med | 5 min local | unchanged |
-| P0 | D: Adversarial Validation | Distribution Alignment | Med | 30 min GPU | + Temporal CV |
-| ✅ | C: Rank-Based Target | Loss Optimization | **+0.0035 OOF** | 1h GPU | Stage 1 done, rank replaces v7 |
-| ✅ | H: Label Noise Handling | Data Quality | **+0.0013 OOF** | 2.5h GPU | (a) Remove best, high corr w/ v7 |
-| ❌ | E: TabM (was TabNet) | DL/Tabular SOTA | OOF 0.4445, weight=0 | 2h GPU | DL ceiling ~0.44 |
-| P1 | G: Pseudo-Labeling | Semi-Supervised | Low-Med | 1h GPU | + curriculum strategy |
-| P2 | B: Stacking Meta-Learner | Ensemble | Conditional | 30 min | depends on C/E/H |
-| P2 | F: Final Ensemble | Combination | Depends | Low | unchanged |
+| Priority | Experiment | Method | Result | Status |
+|----------|------------|--------|--------|--------|
+| ✅ | C: Rank-Based Target | Loss Optimization | OOF **0.6464**, Platform **0.5698** 🎉 | Done — NEW BEST |
+| ✅ | D: Adversarial Validation | Distribution Shift Diag. | AUC≈1.0, AV harmful, Temporal CV useful | Done |
+| ✅ | H: Label Noise Handling | Data Quality | OOF +0.0013, Platform **0.5613** ❌ | Done — excluded from final |
+| ✅ | E: TabM DL | SOTA Tabular DL | OOF **0.4445**, weight=0 | Done — DL ceiling ~0.44 |
+| ✅ | G: Pseudo-Labeling | Semi-Supervised | OOF 0.6463 (-0.0001) — **null result** | Done — excluded (threshold/range mismatch) |
+| **P0** | **F: Final Ensemble** | Combination | rank C + Exp G (if passes) | After G |
+| ~~P2~~ | ~~B: Stacking~~ | ~~Meta-Learner~~ | — | ~~SKIP~~ (corr >0.99, no diversity) |
+| ~~P0~~ | ~~A: M1-5 Weight Opt.~~ | ~~Ensemble~~ | — | ~~SKIP~~ (superseded by Exp C) |
 
 ---
 
