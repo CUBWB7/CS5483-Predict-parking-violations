@@ -9,7 +9,7 @@ Predict parking violation rates (`invalid_ratio`, 0–1) across urban zones in T
 - **Data source**: [ChallengeData #163](https://challengedata.ens.fr/challenges/163)
 - **Metric**: Spearman correlation coefficient
 - **Official baseline**: 0.197 (Random Forest, 10 trees)
-- **Current best**: **0.5636** (LightGBM + XGBoost weighted ensemble v7, Platform score)
+- **Current best**: **0.5705** (rank-target LGB+XGB Ensemble I-A, Platform score, ranked #5)
 
 ## Quick Start
 
@@ -108,7 +108,9 @@ The raw CSV files (~500 MB total) are too large for GitHub. Download from the co
 | v4 | + CatBoost Optuna (GPU) | 0.6408 | — | CB weight=0, no ensemble gain |
 | v5 | + Grid×Month TE (Tier 3) | 0.6408 | — | Marginal, feature space saturated |
 | v6 | Spearman ES + feature pruning | 0.6377 | 0.5618 | ES not viable for Spearman |
-| **v7** | **+ log1p(tc) sample weighting** | **0.6429** | **0.5636** | **Current best** |
+| **v7** | **+ log1p(tc) sample weighting** | **0.6429** | **0.5636** | Former best |
+| **Exp C** | **Rank-target LGB+XGB** | **0.6464** | **0.5698** | Sprint best |
+| **Exp I-A** | **LGB n_iter 10K→20K** | **0.6478** | **0.5705** 🎉 | **Current best, #5** |
 
 ### Negative Results (Steps 11–14)
 
@@ -136,7 +138,7 @@ The raw CSV files (~500 MB total) are too large for GitHub. Download from the co
 - [x] Phase 4: Evaluation & analysis (ablation, SHAP, error analysis)
 - [x] Phase 5a: Improvement (Optuna tuning, CatBoost, sample weighting → v7)
 - [x] Phase 5b: Gap reduction experiments (Steps 8–14, all negative results)
-- [ ] Phase 5c: Final sprint experiments (A–H, in progress)
+- [x] Phase 5c: Final sprint experiments (A–I, complete — best Platform 0.5705 🎉)
 - [ ] Phase 6: Report (~15 pages, deadline 2026-04-23)
 - [ ] Phase 7: Presentation video (15 min, deadline 2026-04-15)
 
@@ -215,7 +217,7 @@ Key papers used in this project (see `docs/literature_review.md` for full review
 | Phase 4 评估分析 | ✅ | 消融实验、SHAP、误差分析，12 张图 |
 | Phase 5a 提分 | ✅ | Optuna 调参 + sample weighting → v7，平台 **0.5636** |
 | Phase 5b Gap 实验 | ✅ | Steps 8–14 均为负面结果（TE 偏移、正则化、DART、NN） |
-| Phase 5c 冲刺实验 | 🔄 | 实验 A–H 进行中 |
+| Phase 5c 冲刺实验 | ✅ | 实验 A–I 完成，平台最佳 **0.5705** 🎉，排名第 5 |
 | Phase 6 报告 | ❌ | 截止 4/23 |
 | Phase 7 展示视频 | ❌ | 截止 4/15 |
 

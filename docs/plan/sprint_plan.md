@@ -24,7 +24,7 @@
 | Exp E | TabM DL (ICLR 2025) | 0.4445 | not submitted | — | ❌ OOF too low, weight=0 |
 | Exp H(a) | Remove noise (tc=1) | **0.6442** | 0.5613 ❌ | 0.083 | OOF +0.0013 but platform -0.0023 |
 | Exp G L1 | Pseudo-label (199 rows) | 0.6463 | — | — | Null result — threshold/range mismatch |
-| **Exp I-A** | **LGB n_iter 20K + fine ensemble** | **0.6478** | **⏳ pending** | — | **+0.0014 vs Exp C, LGB underfitting confirmed** |
+| **Exp I-A** | **LGB n_iter 20K + fine ensemble** | **0.6478** | **0.5705** 🎉 | 0.077 | **NEW BEST** (+0.0007 vs Exp C, ranked #5) |
 | Exp I-B | Optuna re-tune for rank-target | 0.6474 | — | — | Optuna no gain vs v7 params |
 
 ### Lessons from Steps 8-14
@@ -186,7 +186,7 @@ Exp G excluded (OOF 0.6463 < threshold 0.6464 by 0.0001). Final file: `submissio
 | ✅ | I: GBDT Re-tuning | Hyperparameter Opt. | OOF **0.6478** (+0.0014), LGB n_iter 10K→20K | Done — Part A best, Optuna no gain |
 | ~~P2~~ | ~~B: Stacking~~ | ~~Meta-Learner~~ | — | ~~SKIP~~ (corr >0.99, no diversity) |
 | ~~P0~~ | ~~A: M1-5 Weight Opt.~~ | ~~Ensemble~~ | — | ~~SKIP~~ (superseded by Exp C) |
-| ⏳ | J: TabM v2 (rank-target) | DL + rank-target | — | Optional — pending time/GPU |
+| ~~P2~~ | ~~J: TabM v2 (rank-target)~~ | ~~DL + rank-target~~ | — | ~~SKIP~~ (DL ceiling, deadline pressure) |
 
 ---
 

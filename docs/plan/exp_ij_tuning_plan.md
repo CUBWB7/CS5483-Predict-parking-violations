@@ -218,16 +218,24 @@ def objective(trial):
 - Best result: **Part A** (Ensemble I-A, OOF=0.6478, M1-5=0.6537)
 - Part B did not improve over Part A → `ensemble_i_a.csv` is the submission to use
 - `ensemble_i_final.csv` not generated separately (Part A csv is the final answer)
-- Pending: platform submission (no quota until evening)
+- **Platform result (2026-04-11): 0.5705** 🎉 (ranked #5, +0.0007 vs Exp C 0.5698, NEW BEST)
 
 ---
 
-## Experiment J: TabM v2 with Rank-Target (Optional)
+## Experiment J: TabM v2 with Rank-Target — ⏭️ SKIPPED
 
-**Priority**: MEDIUM (P2)
-**Script**: `scripts/step_j_gpu.py` (to be created, based on `step_e_gpu.py`)
-**GPU Time**: ~3 hours
-**Decision gate**: Only proceed if Exp I is running/complete AND GPU time allows
+**Priority**: ~~MEDIUM (P2)~~ → SKIPPED
+**Script**: `scripts/step_j_gpu.py` (not created)
+**GPU Time**: ~3 hours (not spent)
+**Decision**: Skip. Exp I Part B Optuna already consumed 5h+ GPU time with no gain over Part A.
+Remaining time (video deadline 2026-04-15) is better spent on report and video production.
+
+**Skip rationale**:
+1. Even with all 6 fixes applied, TabM v2 OOF ceiling is estimated ~0.55-0.60, far below GBDT 0.64
+2. At best 5-10% ensemble weight → expected gain only +0.001-0.003 OOF
+3. Three DL attempts (ResNet 0.42, TabM 0.44, TabM v2 est. 0.55-0.60) consistently trail GBDT by 0.04-0.22
+4. 3h GPU time + analysis overhead not justified given deadline pressure
+5. For the report: document as "DL structurally inferior on this dataset" with the root cause analysis below
 
 ### Why TabM Failed (Exp E Root Cause Analysis)
 

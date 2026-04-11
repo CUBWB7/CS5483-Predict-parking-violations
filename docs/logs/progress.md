@@ -1606,7 +1606,12 @@ Exp C 使用 v7 的 Optuna 参数（为 raw bimodal target 调优），但 rank-
 
 #### 最终决策
 
-**Part A > Part B > Exp C**：提交 `ensemble_i_a.csv`（OOF=0.6478, M1-5=0.6537），等平台额度恢复后提交。
+**Part A > Part B > Exp C**：已提交 `ensemble_i_a.csv`（OOF=0.6478, M1-5=0.6537）。
+
+**平台结果（2026-04-11）**：**0.5705** 🎉（排名第 5）
+- vs Exp C: **+0.0007**（0.5705 vs 0.5698）
+- OOF-Platform gap: 0.6478 - 0.5705 = **0.077**（与历史 gap 一致）
+- **新项目最佳**：Platform 0.5705
 
 #### 产出文件
 
