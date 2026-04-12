@@ -18,7 +18,7 @@ background: /doc-figures/fig5_spatial_violation.png
 
 <br>
 
-<div class="text-xl font-bold text-yellow-200 bg-black/30 inline-block px-3 py-1 rounded">
+<div class="text-xl font-bold text-black bg-white/70 inline-block px-3 py-1 rounded">
   Platform Spearman: 0.5705 · Rank #5 Globally
 </div>
 
@@ -29,7 +29,7 @@ The heatmap behind us shows actual geographic violation patterns across the city
 
 ---
 layout: section
-color: sky-light
+color: sky
 ---
 
 # Section 1
@@ -62,7 +62,7 @@ color: sky-light
 
 :: right ::
 
-<img src="/doc-figures/fig1_target_distribution.png" class="h-80 rounded shadow" />
+<img src="/doc-figures/fig1_target_distribution.png" class="w-full rounded shadow" />
 
 <small class="text-gray-500 text-xs">Distribution of `invalid_ratio` — heavy mass at 0 and 1 from low-count noise</small>
 
@@ -126,7 +126,7 @@ If we train to minimize MSE but evaluate with Spearman, we're optimizing the wro
 
 ---
 layout: section
-color: sky-light
+color: sky
 ---
 
 # Section 2
@@ -158,7 +158,7 @@ color: sky-light
 
 :: right ::
 
-<img src="/doc-figures/fig4_spearman_correlation.png" class="h-88 rounded shadow" />
+<img src="/doc-figures/fig4_spearman_correlation.png" class="w-full rounded shadow" />
 
 <small class="text-gray-500 text-xs">Spearman correlations — total_count and location dominate</small>
 
@@ -202,7 +202,7 @@ sample_weight = np.log1p(total_count)
 
 :: right ::
 
-<img src="/doc-figures/fig_h_noise_diagnosis.png" class="h-84 rounded shadow" />
+<img src="/doc-figures/fig_h_noise_diagnosis.png" class="w-full rounded shadow" />
 
 <small class="text-gray-500 text-xs">Label noise diagnosis — tc=1 subset shows extreme bimodality</small>
 
@@ -273,7 +273,7 @@ Busy zones attract compliant behavior or more enforcement attention.
 
 ---
 layout: section
-color: blue-light
+color: blue
 ---
 
 # Section 3
@@ -381,7 +381,7 @@ Train and test come from **different temporal periods** — shift is structural.
 
 ---
 layout: section
-color: cyan-light
+color: teal
 ---
 
 # Section 4
@@ -435,7 +435,7 @@ lgb_model.fit(X_train, y_rank, sample_weight=weights, ...)
 
 :: right ::
 
-<img src="/figures/rank_target_diagram.png" class="h-84 rounded shadow" />
+<img src="/figures/rank_target_diagram.png" class="w-full rounded shadow" />
 
 <small class="text-gray-500 text-xs">Left: skewed original target. Right: uniform rank-transformed target.</small>
 
@@ -478,7 +478,7 @@ color: cyan-light
 
 ---
 layout: section
-color: slate-light
+color: slate
 ---
 
 # Section 5
@@ -533,7 +533,7 @@ color: slate-light
 
 :: right ::
 
-<img src="/figures/tabm_correlation.png" class="h-84 rounded shadow" />
+<img src="/figures/tabm_correlation.png" class="w-full rounded shadow" />
 
 <small class="text-gray-500 text-xs">TabM predictions poorly correlated with ground truth</small>
 
@@ -563,8 +563,8 @@ color: slate-light
 
 :: right ::
 
-<img src="/figures/shap_bar.png" class="h-52 rounded shadow mb-2" />
-<img src="/figures/shap_dep_total_count.png" class="h-44 rounded shadow" />
+<img src="/figures/shap_bar.png" class="w-full rounded shadow mb-2" />
+<img src="/figures/shap_dep_total_count.png" class="w-full rounded shadow" />
 
 ---
 layout: section
@@ -607,7 +607,7 @@ color: navy-light
 
 :: right ::
 
-<img src="/subs/challengedata_ranking.png" class="h-90 rounded shadow" />
+<img src="/subs/challengedata_ranking.png" class="w-full rounded shadow" />
 
 <small class="text-gray-500 text-xs">Rank #5 globally with Platform Spearman 0.5705</small>
 
