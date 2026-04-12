@@ -36,7 +36,7 @@ color: sky
 ## Introduction & Problem Setup
 
 ---
-layout: top-title-two-cols
+layout: top-title
 color: sky-light
 ---
 
@@ -44,9 +44,10 @@ color: sky-light
 
 # What Are We Predicting?
 
-:: left ::
+:: default ::
 
-<div class="text-sm leading-relaxed">
+<div class="flex gap-6 h-full items-start">
+<div class="w-[38%] text-sm leading-relaxed">
 
 - **Dataset**: THESi smart parking system, Thessaloniki, Greece
 - **Training set**: 6.07 M observations, 10 features
@@ -54,17 +55,14 @@ color: sky-light
 - **Evaluation**: Spearman rank correlation ρ
 - **Train / Test / Features**: 6.07 M · 1.5 M · 10
 
-<br>
-
 > **The metric rewards ranking, not numerical accuracy.**
 
 </div>
-
-:: right ::
-
+<div class="w-[62%]">
 <img src="/doc-figures/fig1_target_distribution.png" class="w-full rounded shadow" />
-
 <small class="text-gray-500 text-xs">Distribution of `invalid_ratio` — heavy mass at 0 and 1 from low-count noise</small>
+</div>
+</div>
 
 <!--
 Note the bimodal mass at 0 and 1 — caused by locations with total_count=1,
@@ -82,7 +80,7 @@ color: sky-light
 
 :: default ::
 
-<div class="grid grid-cols-2 gap-8 mt-1 text-sm">
+<div class="grid grid-cols-2 gap-8 -mt-4 text-sm">
 <div>
 
 **What is Spearman ρ?**
@@ -133,7 +131,7 @@ color: sky
 ## Data Exploration & Feature Engineering
 
 ---
-layout: top-title-two-cols
+layout: top-title
 color: sky-light
 ---
 
@@ -141,26 +139,24 @@ color: sky-light
 
 # What the Data Tells Us
 
-:: left ::
+:: default ::
 
-<div class="text-sm leading-relaxed">
+<div class="flex gap-6 h-full items-start">
+<div class="w-[35%] text-sm leading-relaxed">
 
 - **Strongest predictor**: `total_count` (ρ = −0.297) — busier locations have fewer violations
 - Geographic patterns carry strong spatial signal
 - Temporal features show enforcement cycles
 - Weather features: minimal predictive power (ρ < 0.03)
 
+<img src="/doc-figures/fig2_totalcount_vs_violation.png" class="w-full rounded shadow mt-3" />
+
 </div>
-
-<br>
-
-<img src="/doc-figures/fig2_totalcount_vs_violation.png" class="h-36 rounded shadow" />
-
-:: right ::
-
+<div class="w-[65%]">
 <img src="/doc-figures/fig4_spearman_correlation.png" class="w-full rounded shadow" />
-
 <small class="text-gray-500 text-xs">Spearman correlations — total_count and location dominate</small>
+</div>
+</div>
 
 <!--
 Most signal comes from where you are and how busy the location is.
@@ -168,7 +164,7 @@ Weather and day-of-week are much weaker predictors.
 -->
 
 ---
-layout: top-title-two-cols
+layout: top-title
 color: sky-light
 ---
 
@@ -176,15 +172,14 @@ color: sky-light
 
 # Challenge: High Noise in Low-Count Observations
 
-:: left ::
+:: default ::
 
-<div class="text-sm leading-relaxed">
+<div class="flex gap-6 h-full items-start">
+<div class="w-[38%] text-sm leading-relaxed">
 
 - Locations with `total_count = 1` account for **~25% of training data**
 - For these, `invalid_ratio` is exactly 0 or 1 — binary, not continuous
 - Creates severe **label noise** that degrades model training
-
-<br>
 
 **Solution: Sample Weighting**
 
@@ -194,17 +189,15 @@ sample_weight = np.log1p(total_count)
 
 - Downweights noisy tc=1 samples without discarding them
 - Preserves the full 6 M training set
-- Applied from v7 onwards
 
 > *"Down-weight unreliable samples, don't throw them away."*
 
 </div>
-
-:: right ::
-
+<div class="w-[62%]">
 <img src="/doc-figures/fig_h_noise_diagnosis.png" class="w-full rounded shadow" />
-
 <small class="text-gray-500 text-xs">Label noise diagnosis — tc=1 subset shows extreme bimodality</small>
+</div>
+</div>
 
 ---
 layout: top-title
@@ -400,7 +393,7 @@ Spearman only cares about **relative order**.
 *Training in the wrong direction.*
 
 ---
-layout: top-title-two-cols
+layout: top-title
 color: cyan-light
 ---
 
@@ -408,9 +401,10 @@ color: cyan-light
 
 # Solution: Train to Rank, Not to Regress
 
-:: left ::
+:: default ::
 
-<div class="text-sm leading-relaxed">
+<div class="flex gap-6 h-full items-start">
+<div class="w-[38%] text-sm leading-relaxed">
 
 **Transformation:**
 
@@ -420,9 +414,7 @@ $$y_{\text{rank}} = \frac{\text{rankdata}(y)}{N}$$
 - Model learns **relative ordering**, not absolute values
 - No other changes to the pipeline
 
-<br>
-
-```python {1|2|all}
+```python
 # Replace raw target with rank-normalized target
 y_rank = rankdata(train_df['invalid_ratio']) / len(train_df)
 # Train exactly as before
@@ -432,12 +424,11 @@ lgb_model.fit(X_train, y_rank, sample_weight=weights, ...)
 > *"One line of code. The biggest single improvement in our entire pipeline."*
 
 </div>
-
-:: right ::
-
+<div class="w-[62%]">
 <img src="/figures/rank_target_diagram.png" class="w-full rounded shadow" />
-
 <small class="text-gray-500 text-xs">Left: skewed original target. Right: uniform rank-transformed target.</small>
+</div>
+</div>
 
 ---
 layout: top-title-two-cols
@@ -505,7 +496,7 @@ color: slate-light
 </div>
 
 ---
-layout: top-title-two-cols
+layout: top-title
 color: slate-light
 ---
 
@@ -513,9 +504,10 @@ color: slate-light
 
 # Deep Learning Does Not Help Here
 
-:: left ::
+:: default ::
 
-<div class="text-sm leading-relaxed">
+<div class="flex gap-6 h-full items-start">
+<div class="w-[38%] text-sm leading-relaxed">
 
 - Tested **TabM** (ICLR 2025 — state-of-the-art tabular DL)
 - OOF Spearman: **0.4445** vs GBDT **0.6429** — gap of **0.198**
@@ -530,12 +522,11 @@ color: slate-light
 > *"Domain structure matters more than model architecture."*
 
 </div>
-
-:: right ::
-
+<div class="w-[62%]">
 <img src="/figures/tabm_correlation.png" class="w-full rounded shadow" />
-
 <small class="text-gray-500 text-xs">TabM predictions poorly correlated with ground truth</small>
+</div>
+</div>
 
 ---
 layout: top-title-two-cols
@@ -563,8 +554,8 @@ color: slate-light
 
 :: right ::
 
-<img src="/figures/shap_bar.png" class="w-full rounded shadow mb-2" />
-<img src="/figures/shap_dep_total_count.png" class="w-full rounded shadow" />
+<img src="/figures/shap_bar.png" class="w-full max-h-52 object-contain rounded shadow mb-2" />
+<img src="/figures/shap_dep_total_count.png" class="w-full max-h-44 object-contain rounded shadow" />
 
 ---
 layout: section
@@ -575,7 +566,7 @@ color: navy-light
 ## Conclusion
 
 ---
-layout: top-title-two-cols
+layout: top-title
 color: navy-light
 ---
 
@@ -583,33 +574,31 @@ color: navy-light
 
 # Results: Platform 0.5705, Rank #5
 
-:: left ::
+:: default ::
 
-- Official baseline: **0.197** → Our result: **0.5705** → Improvement: **+190%**
+<div class="flex gap-6 h-full items-start">
+<div class="w-[40%] text-sm leading-relaxed">
+
+- Official baseline: **0.197** → Our result: **0.5705** (+190%)
 - Leaderboard: **Rank #5 globally**
-
-<br>
 
 **Key contributions:**
 
-1. **Tier 2 feature engineering** with leakage-free K-Fold TE
-2. **Rank-target training** — aligning training with Spearman
+1. **Tier 2 feature engineering** — leakage-free K-Fold TE
+2. **Rank-target training** — aligning objective with Spearman
 3. **Systematic gap diagnosis** via adversarial validation
 4. **Sample weighting** to handle label noise
 
-<br>
-
-<img src="/figures/score_progression.png" class="h-36 rounded shadow" />
-
-<br>
+<img src="/figures/score_progression.png" class="w-full rounded shadow mt-2" />
 
 🔗 [Public Leaderboard](https://challengedata.ens.fr/participants/challenges/163/ranking/public)
 
-:: right ::
-
+</div>
+<div class="w-[60%]">
 <img src="/subs/challengedata_ranking.png" class="w-full rounded shadow" />
-
 <small class="text-gray-500 text-xs">Rank #5 globally with Platform Spearman 0.5705</small>
+</div>
+</div>
 
 ---
 layout: default
