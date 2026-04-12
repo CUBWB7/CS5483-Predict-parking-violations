@@ -301,7 +301,7 @@ color: blue-light
 <img src="/figures/model_comparison.png" class="h-34 rounded shadow" />
 
 ---
-layout: top-title-two-cols
+layout: top-title
 color: blue-light
 ---
 
@@ -309,7 +309,7 @@ color: blue-light
 
 # Iterative Improvement: v1 → v7
 
-:: left ::
+:: content ::
 
 <div class="text-sm leading-relaxed">
 
@@ -326,12 +326,6 @@ color: blue-light
 > Each engineering decision produced **measurable, documented improvement.**
 
 </div>
-
-:: right ::
-
-<img src="/figures/score_progression.png" class="h-80 rounded shadow" />
-
-<small class="text-gray-500 text-xs">Solid = OOF Spearman · Dashed = Platform Spearman</small>
 
 ---
 layout: top-title-two-cols
