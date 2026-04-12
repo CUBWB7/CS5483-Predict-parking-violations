@@ -51,3 +51,7 @@ skills-lock.json
 node_modules/
 presentation/node_modules/
 presentation/.slidev/
+
+# Video podcast maker (external tool, not part of project)
+video-podcast-maker/
+video_production
