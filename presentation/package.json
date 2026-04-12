@@ -1,0 +1,25 @@
+{
+  "name": "cs5483-parking-violations-slides",
+  "private": true,
+  "scripts": {
+    "dev": "slidev slides.md --open",
+    "build": "slidev build slides.md",
+    "export": "slidev export slides.md --output slides-export.pdf",
+    "export-pptx": "slidev export slides.md --format pptx --output slides-export.pptx"
+  },
+  "dependencies": {
+    "@slidev/cli": "^0.50.0",
+    "@slidev/theme-default": "latest",
+    "slidev-theme-academic": "latest"
+  },
+  "devDependencies": {
+    "playwright-chromium": "latest"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "playwright-chromium",
+      "vue-demi"
+    ]
+  }
+}

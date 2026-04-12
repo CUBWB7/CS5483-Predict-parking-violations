@@ -48,3 +48,6 @@ notebooks/*_executed.ipynb
 # Code artifacts
 .agents/
 skills-lock.json
+node_modules/
+presentation/node_modules/
+presentation/.slidev/
