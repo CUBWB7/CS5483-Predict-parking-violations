@@ -14,12 +14,18 @@ background: /doc-figures/fig5_spatial_violation.png
 
 <br>
 
-**ChallengeData #163** · CS5483 Data Mining · April 2026
+<div class="text-lg font-semibold">
+  CS5483 Data Mining · April 2026
+</div>
+
+<div class="text-xl font-semibold mt-1">
+  <b>Group 28</b> · Member1 id001 · Member2 id002 · Member3 id003 · Member4 id004
+</div>
 
 <br>
 
 <div class="text-xl font-bold text-black bg-white/70 inline-block px-3 py-1 rounded">
-  Platform Spearman: 0.5705 · Rank #5 Globally
+  <b>ChallengeData #163</b> · Platform Spearman: 0.5705 · Rank #5 Globally
 </div>
 
 <!--
