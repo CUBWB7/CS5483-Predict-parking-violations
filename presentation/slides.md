@@ -5,7 +5,7 @@ info: |
   ChallengeData #163 | CS5483 Data Mining | April 2026
 neversink_string: 'CS5483 | ChallengeData #163'
 layout: cover
-color: navy
+color: sky-light
 background: /doc-figures/fig5_spatial_violation.png
 ---
 
@@ -29,7 +29,7 @@ The heatmap behind us shows actual geographic violation patterns across the city
 
 ---
 layout: section
-color: navy
+color: sky-light
 ---
 
 # Section 1
@@ -52,14 +52,7 @@ color: sky-light
 - **Training set**: 6.07 M observations, 10 features
 - **Target**: `invalid_ratio` — fraction of invalid parking events per location-timeslot
 - **Evaluation**: Spearman rank correlation ρ
-
-<br>
-
-| Split | Rows |
-|-------|------|
-| Train | ~6.07 M |
-| Test  | ~1.5 M |
-| Features | 10 |
+- **Train / Test / Features**: 6.07 M · 1.5 M · 10
 
 <br>
 
@@ -69,7 +62,7 @@ color: sky-light
 
 :: right ::
 
-<img src="/doc-figures/fig1_target_distribution.png" class="h-72 rounded shadow" />
+<img src="/doc-figures/fig1_target_distribution.png" class="h-80 rounded shadow" />
 
 <small class="text-gray-500 text-xs">Distribution of `invalid_ratio` — heavy mass at 0 and 1 from low-count noise</small>
 
@@ -133,7 +126,7 @@ If we train to minimize MSE but evaluate with Spearman, we're optimizing the wro
 
 ---
 layout: section
-color: navy
+color: sky-light
 ---
 
 # Section 2
@@ -161,11 +154,11 @@ color: sky-light
 
 <br>
 
-<img src="/doc-figures/fig2_totalcount_vs_violation.png" class="h-44 rounded shadow" />
+<img src="/doc-figures/fig2_totalcount_vs_violation.png" class="h-36 rounded shadow" />
 
 :: right ::
 
-<img src="/doc-figures/fig4_spearman_correlation.png" class="h-80 rounded shadow" />
+<img src="/doc-figures/fig4_spearman_correlation.png" class="h-88 rounded shadow" />
 
 <small class="text-gray-500 text-xs">Spearman correlations — total_count and location dominate</small>
 
@@ -203,15 +196,13 @@ sample_weight = np.log1p(total_count)
 - Preserves the full 6 M training set
 - Applied from v7 onwards
 
-<br>
-
 > *"Down-weight unreliable samples, don't throw them away."*
 
 </div>
 
 :: right ::
 
-<img src="/doc-figures/fig_h_noise_diagnosis.png" class="h-80 rounded shadow" />
+<img src="/doc-figures/fig_h_noise_diagnosis.png" class="h-84 rounded shadow" />
 
 <small class="text-gray-500 text-xs">Label noise diagnosis — tc=1 subset shows extreme bimodality</small>
 
@@ -268,10 +259,10 @@ color: sky-light
 :: right ::
 
 <div class="flex flex-col gap-2">
-<img src="/figures/shap_dep_total_count.png" class="h-40 rounded shadow" />
+<img src="/figures/shap_dep_total_count.png" class="h-48 rounded shadow" />
 <div class="flex gap-2">
-<img src="/figures/lgbm_feature_importance.png" class="h-38 rounded shadow flex-1 object-contain" />
-<img src="/figures/shap_bar.png" class="h-38 rounded shadow flex-1 object-contain" />
+<img src="/figures/lgbm_feature_importance.png" class="h-44 rounded shadow flex-1 object-contain" />
+<img src="/figures/shap_bar.png" class="h-44 rounded shadow flex-1 object-contain" />
 </div>
 </div>
 
@@ -282,7 +273,7 @@ Busy zones attract compliant behavior or more enforcement attention.
 
 ---
 layout: section
-color: navy
+color: blue-light
 ---
 
 # Section 3
@@ -299,12 +290,12 @@ color: blue-light
 
 :: left ::
 
+<div class="text-sm leading-relaxed">
+
 - **Base models**: LightGBM and XGBoost (gradient boosting)
 - **Ensemble**: weighted average, weights optimized on OOF Spearman
 - CatBoost tested — final weight → **0**, excluded
 - **Cross-validation**: 5-Fold with Spearman early stopping
-
-<br>
 
 | Model | OOF ρ |
 |-------|-------|
@@ -312,6 +303,8 @@ color: blue-light
 | XGBoost alone | ~0.618 |
 | **LGB + XGB ensemble** | **0.6429** |
 | + CatBoost | no gain |
+
+</div>
 
 :: right ::
 
@@ -329,6 +322,8 @@ color: blue-light
 
 :: left ::
 
+<div class="text-sm leading-relaxed">
+
 | Version | Key Change | Platform ρ | Δ |
 |---------|------------|------------|---|
 | v1 | Initial LGB + XGB | 0.5222 | — |
@@ -336,14 +331,12 @@ color: blue-light
 | v3 | Optuna hyperparameter tuning | 0.5620 | +0.0282 |
 | v7 | Sample weighting `log1p(tc)` | **0.5636** | +0.0016 |
 
-<br>
-
 - Optuna (v3) was the biggest pre-innovation gain: **+0.0282**
 - OOF ≈ 0.643, Platform ≈ 0.564 — consistent gap ~0.079
 
-<br>
-
 > Each engineering decision produced **measurable, documented improvement.**
+
+</div>
 
 :: right ::
 
@@ -362,9 +355,9 @@ color: blue-light
 
 :: left ::
 
-**Observed**: OOF ~0.643, Platform ~0.564 → gap **~0.079**
+<div class="text-sm leading-relaxed">
 
-<br>
+**Observed**: OOF ~0.643, Platform ~0.564 → gap **~0.079**
 
 | Hypothesis | Test | Result |
 |-----------|------|--------|
@@ -373,11 +366,11 @@ color: blue-light
 | | Temporal CV (M1–M4 → M5) | ✅ Gap −0.041 |
 | | TE distribution plot | ✅ Clear mismatch |
 
-<br>
-
 Train and test come from **different temporal periods** — shift is structural.
 
 > *"Diagnose before you optimize."*
+
+</div>
 
 :: right ::
 
@@ -388,7 +381,7 @@ Train and test come from **different temporal periods** — shift is structural.
 
 ---
 layout: section
-color: navy
+color: cyan-light
 ---
 
 # Section 4
@@ -436,15 +429,13 @@ y_rank = rankdata(train_df['invalid_ratio']) / len(train_df)
 lgb_model.fit(X_train, y_rank, sample_weight=weights, ...)
 ```
 
-<br>
-
 > *"One line of code. The biggest single improvement in our entire pipeline."*
 
 </div>
 
 :: right ::
 
-<img src="/figures/rank_target_diagram.png" class="h-80 rounded shadow" />
+<img src="/figures/rank_target_diagram.png" class="h-84 rounded shadow" />
 
 <small class="text-gray-500 text-xs">Left: skewed original target. Right: uniform rank-transformed target.</small>
 
@@ -487,7 +478,7 @@ color: cyan-light
 
 ---
 layout: section
-color: navy
+color: slate-light
 ---
 
 # Section 5
@@ -524,11 +515,11 @@ color: slate-light
 
 :: left ::
 
+<div class="text-sm leading-relaxed">
+
 - Tested **TabM** (ICLR 2025 — state-of-the-art tabular DL)
 - OOF Spearman: **0.4445** vs GBDT **0.6429** — gap of **0.198**
 - Root cause: only 10 input features, no image/text structure → GBDT advantages dominate on compact tabular data
-
-<br>
 
 | Model | OOF ρ | Notes |
 |-------|-------|-------|
@@ -536,13 +527,13 @@ color: slate-light
 | LGB + XGB (v7) | 0.6429 | GBDT baseline |
 | Rank-Target (Exp I-A) | **0.6478** | Our final |
 
-<br>
-
 > *"Domain structure matters more than model architecture."*
+
+</div>
 
 :: right ::
 
-<img src="/figures/tabm_correlation.png" class="h-80 rounded shadow" />
+<img src="/figures/tabm_correlation.png" class="h-84 rounded shadow" />
 
 <small class="text-gray-500 text-xs">TabM predictions poorly correlated with ground truth</small>
 
@@ -577,7 +568,7 @@ color: slate-light
 
 ---
 layout: section
-color: navy
+color: navy-light
 ---
 
 # Section 6
