@@ -8,9 +8,10 @@
     "export-pptx": "slidev export slides.md --format pptx --output slides-export.pptx"
   },
   "dependencies": {
-    "@slidev/cli": "^0.50.0",
+    "@slidev/cli": "^52.14.2",
     "@slidev/theme-default": "latest",
-    "slidev-theme-academic": "latest"
+    "slidev-theme-academic": "latest",
+    "slidev-theme-neversink": "^0.4.1"
   },
   "devDependencies": {
     "playwright-chromium": "latest"

@@ -1,20 +1,12 @@
 ---
-theme: academic
+theme: neversink
 title: Predicting Parking Violation Rates Using Gradient Boosting
 info: |
   ChallengeData #163 | CS5483 Data Mining | April 2026
-  Platform Spearman: 0.5705 · Rank #5 Globally
-themeConfig:
-  paginationX: 'r'
-  paginationY: 't'
-  paginationPagesDisabled: [1, 2]
----
-
-<!-- ───────────────────────────── SLIDE 1: COVER ───────────────────────────── -->
----
+neversink_string: 'CS5483 | ChallengeData #163'
 layout: cover
-coverDate: 'April 2026'
-coverBackgroundUrl: ../docs/figures/fig5_spatial_violation.png
+color: navy
+background: /doc-figures/fig5_spatial_violation.png
 ---
 
 # Predicting Parking Violation Rates
@@ -22,34 +14,40 @@ coverBackgroundUrl: ../docs/figures/fig5_spatial_violation.png
 
 <br>
 
-**ChallengeData #163** · CS5483 Data Mining
+**ChallengeData #163** · CS5483 Data Mining · April 2026
 
 <br>
 
-<div class="text-xl font-bold text-yellow-300">Platform Spearman: 0.5705 · Rank #5 Globally</div>
+<div class="text-xl font-bold text-yellow-200 bg-black/30 inline-block px-3 py-1 rounded">
+  Platform Spearman: 0.5705 · Rank #5 Globally
+</div>
 
 <!--
 Open with the real-world context: a smart parking enforcement system in Thessaloniki, Greece.
-The heatmap behind us shows actual violation patterns across the city — darker means more violations.
+The heatmap behind us shows actual geographic violation patterns across the city.
 -->
 
-<!-- ─────────────────── SECTION DIVIDER ─────────────────── -->
 ---
 layout: section
+color: navy
 ---
 
 # Section 1
 ## Introduction & Problem Setup
 
-<!-- ───────────────────────────── SLIDE 2: PROBLEM & DATA ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: sky-light
 ---
+
+:: title ::
 
 # What Are We Predicting?
 
+:: left ::
+
 - **Dataset**: THESi smart parking system, Thessaloniki, Greece
-- **Training set**: 6.07 million observations, 10 features
+- **Training set**: 6.07 M observations, 10 features
 - **Target**: `invalid_ratio` — fraction of invalid parking events per location-timeslot
 - **Evaluation**: Spearman rank correlation ρ
 
@@ -63,30 +61,33 @@ layout: two-cols
 
 <br>
 
-> **The metric rewards ranking — not numerical accuracy.**
+> **The metric rewards ranking, not numerical accuracy.**
 
-::right::
+:: right ::
 
-<img src="../docs/figures/fig1_target_distribution.png" class="h-72 rounded shadow" />
+<img src="/doc-figures/fig1_target_distribution.png" class="h-72 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Distribution of `invalid_ratio` — highly skewed, mass at 0 and 1</small>
+<small class="text-gray-500 text-xs">Distribution of `invalid_ratio` — heavy mass at 0 and 1 from low-count noise</small>
 
 <!--
-Note the bimodal mass at 0 and 1 — this is caused by low-count locations
-where only one parking event was recorded, forcing the ratio to be binary.
-This noise problem becomes critical later.
+Note the bimodal mass at 0 and 1 — caused by locations with total_count=1,
+where the ratio is forced to be binary. This becomes important later.
 -->
 
-<!-- ───────────────────────────── SLIDE 3: WHY SPEARMAN ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: sky-light
 ---
+
+:: title ::
 
 # Understanding the Evaluation Metric
 
+:: left ::
+
 - **Spearman ρ** measures rank agreement between predictions and ground truth
 - Only the **relative ordering** matters — not absolute values
-- A perfect ranking achieves ρ = 1.0 regardless of scale
+- A perfect ranking scores ρ = 1.0 regardless of scale
 
 <br>
 
@@ -97,68 +98,77 @@ layout: two-cols
 
 <br>
 
-- Official baseline (Random Forest, 10 trees): ρ = **0.197**
+- Official baseline (RF, 10 trees): ρ = **0.197**
 - **Our final result: ρ = 0.5705 · Rank #5 globally**
 
 <br>
 
 > *"Getting the order right matters more than getting the number right."*
 
-::right::
+:: right ::
 
-<img src="../docs/subs/challengedata_ranking.png" class="h-80 rounded shadow" />
+<img src="/subs/challengedata_ranking.png" class="h-80 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Leaderboard — our submission at Rank #5 with Platform Spearman 0.5705</small>
+<small class="text-gray-500 text-xs">Leaderboard — Rank #5 with Platform Spearman 0.5705</small>
 
 <!--
-This metric insight motivates our key innovation later: rank-target training.
-If we train to minimize MSE but evaluate with Spearman, we're optimizing the wrong objective.
+This metric insight motivates our key innovation: rank-target training.
+If we train to minimize MSE but evaluate with Spearman, we are optimizing the wrong objective.
 -->
 
-<!-- ─────────────────── SECTION DIVIDER ─────────────────── -->
 ---
 layout: section
+color: sky
 ---
 
 # Section 2
 ## Data Exploration & Feature Engineering
 
-<!-- ───────────────────────────── SLIDE 4: EDA FINDINGS ───────────────────────────── -->
 ---
-layout: two-cols-header
+layout: top-title-two-cols
+color: sky-light
+columns: 1-1
 ---
+
+:: title ::
 
 # What the Data Tells Us
 
-::left::
+:: left ::
 
 - **Strongest predictor**: `total_count` (ρ = −0.297) — busier locations have fewer violations
-- Geographic patterns (longitude, latitude) carry strong spatial signal
-- Temporal features (hour, month) show clear enforcement cycles
+- Geographic patterns carry strong spatial signal
+- Temporal features show enforcement cycles
 - Weather features: minimal predictive power (ρ < 0.03)
 
-<img src="../docs/figures/fig2_totalcount_vs_violation.png" class="h-44 rounded shadow mt-3" />
+<br>
 
-::right::
+<img src="/doc-figures/fig2_totalcount_vs_violation.png" class="h-44 rounded shadow" />
 
-<img src="../docs/figures/fig4_spearman_correlation.png" class="h-80 rounded shadow" />
+:: right ::
 
-<small class="text-gray-400 text-xs">Spearman correlations — total_count and location dominate</small>
+<img src="/doc-figures/fig4_spearman_correlation.png" class="h-80 rounded shadow" />
+
+<small class="text-gray-500 text-xs">Spearman correlations — total_count and location dominate</small>
 
 <!--
-Most signal comes from where you are and how busy it is.
-Weather and time are much weaker predictors.
+Most signal comes from where you are and how busy the location is.
+Weather and day-of-week are much weaker predictors.
 -->
 
-<!-- ───────────────────────────── SLIDE 5: NOISE PROBLEM ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: sky-light
 ---
+
+:: title ::
 
 # Challenge: High Noise in Low-Count Observations
 
+:: left ::
+
 - Locations with `total_count = 1` account for **~25% of training data**
-- For these, `invalid_ratio` is exactly 0 or exactly 1 — binary, not continuous
+- For these, `invalid_ratio` is exactly 0 or 1 — binary, not continuous
 - Creates severe **label noise** that degrades model training
 
 <br>
@@ -170,37 +180,36 @@ sample_weight = np.log1p(total_count)
 ```
 
 - Downweights noisy tc=1 samples without discarding them
-- Preserves the full 6M training set
-- Applied consistently from v7 onwards
+- Preserves the full 6 M training set
+- Applied from v7 onwards
 
 <br>
 
 > *"Down-weight unreliable samples, don't throw them away."*
 
-::right::
+:: right ::
 
-<img src="../docs/figures/fig_h_noise_diagnosis.png" class="h-80 rounded shadow" />
+<img src="/doc-figures/fig_h_noise_diagnosis.png" class="h-80 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Label noise diagnosis — tc=1 subset shows extreme bimodality</small>
+<small class="text-gray-500 text-xs">Label noise diagnosis — tc=1 subset shows extreme bimodality</small>
 
-<!--
-This was diagnosed early in EDA. The fix is simple but important:
-log1p(total_count) gives weight proportional to how reliable the label is.
--->
-
-<!-- ───────────────────────────── SLIDE 6: FEATURE ENGINEERING ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: sky-light
 ---
+
+:: title ::
 
 # Tier 2 Feature Engineering Pipeline
+
+:: left ::
 
 <v-clicks>
 
 1. **Spatial binning**: Divide map into grids → `grid_x`, `grid_y`, `grid_id`
-2. **K-Fold Target Encoding** (k=5): `grid_te`, `period_te`, … → captures violation rates per zone without leakage
-3. **Cyclic encoding**: `sin/cos(hour)`, `sin/cos(month)` → preserves periodicity
-4. **Cross features**: `total_count × grid_te` → captures interaction between busyness and location risk
+2. **K-Fold Target Encoding** (k=5): `grid_te`, `period_te` — captures violation rates per zone without leakage
+3. **Cyclic encoding**: `sin/cos(hour)`, `sin/cos(month)` — preserves periodicity
+4. **Cross features**: `total_count × grid_te` — busyness × location risk
 5. **Result**: ~20 engineered features from 10 originals
 
 </v-clicks>
@@ -210,64 +219,66 @@ layout: two-cols
 <v-click>
 
 > **K-Fold TE prevents data leakage — a critical design choice.**
-> Training TE is computed within-fold; test TE uses the full training set.
 
 </v-click>
 
-::right::
+:: right ::
 
-<img src="../figures/feature_engineering_pipeline.png" class="h-90 rounded shadow" />
+<img src="/figures/feature_engineering_pipeline.png" class="h-90 rounded shadow" />
 
-<!--
-The most important step here is the K-Fold target encoding.
-Using full-train TE without folds would cause target leakage and overestimate OOF scores.
--->
-
-<!-- ───────────────────────────── SLIDE 7: FEATURE IMPORTANCE ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: sky-light
 ---
+
+:: title ::
 
 # What Drives Violation Rates?
 
+:: left ::
+
 - `total_count` and `grid_te` are consistently the **top-2 features**
 - Geographic (TE) features dominate over weather and raw coordinates
-- SHAP: high `total_count` → **lower violation rate** (busy = compliant)
-- Weather features (precipitation, temperature): minimal SHAP contribution
+- SHAP: high `total_count` → **lower violation rate**
+- Weather features: near-zero SHAP contribution
 
 <br>
 
-<img src="../figures/lgbm_feature_importance.png" class="h-48 rounded shadow" />
+<img src="/figures/lgbm_feature_importance.png" class="h-52 rounded shadow" />
 
-::right::
+:: right ::
 
-<img src="../figures/shap_dep_total_count.png" class="h-48 rounded shadow mb-2" />
-<img src="../figures/shap_bar.png" class="h-38 rounded shadow" />
+<img src="/figures/shap_dep_total_count.png" class="h-48 rounded shadow mb-2" />
+<img src="/figures/shap_bar.png" class="h-36 rounded shadow" />
 
 <!--
-The SHAP dependence plot shows: as total_count increases, SHAP values become more negative,
-meaning the model predicts lower violation rates. This aligns with intuition —
-busy parking zones attract compliant behavior or more enforcement.
+The SHAP dependence plot: as total_count increases, SHAP values become more negative,
+meaning the model predicts lower violation rates.
+Busy zones attract compliant behavior or more enforcement.
 -->
 
-<!-- ─────────────────── SECTION DIVIDER ─────────────────── -->
 ---
 layout: section
+color: blue
 ---
 
 # Section 3
 ## Baseline Development & Gap Analysis
 
-<!-- ───────────────────────────── SLIDE 8: MODEL ARCHITECTURE ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: blue-light
 ---
+
+:: title ::
 
 # Model: LightGBM + XGBoost Ensemble
 
-- **Base models**: LightGBM and XGBoost (gradient boosting decision trees)
+:: left ::
+
+- **Base models**: LightGBM and XGBoost (gradient boosting)
 - **Ensemble**: weighted average, weights optimized on OOF Spearman
-- CatBoost was tested — final weight converged to **0**, excluded
+- CatBoost tested — final weight → **0**, excluded
 - **Cross-validation**: 5-Fold with Spearman early stopping
 
 <br>
@@ -276,29 +287,24 @@ layout: two-cols
 |-------|-------|
 | LightGBM alone | ~0.630 |
 | XGBoost alone | ~0.618 |
-| LGB + XGB ensemble | **0.6429** |
-| + CatBoost (weight→0) | no gain |
+| **LGB + XGB ensemble** | **0.6429** |
+| + CatBoost | no gain |
 
-<br>
+:: right ::
 
-> Two-model ensemble outperformed the three-model one.
+<img src="/figures/ablation_study.png" class="h-52 rounded shadow mb-2" />
+<img src="/figures/model_comparison.png" class="h-34 rounded shadow" />
 
-::right::
-
-<img src="../figures/ablation_study.png" class="h-48 rounded shadow mb-2" />
-<img src="../figures/model_comparison.png" class="h-36 rounded shadow" />
-
-<!--
-The ensemble gain comes from diversity between LGB and XGB in their tree construction methods.
-CatBoost adds no diversity — its learned representation overlaps with LGB.
--->
-
-<!-- ───────────────────────────── SLIDE 9: BASELINE PROGRESSION ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: blue-light
 ---
+
+:: title ::
 
 # Iterative Improvement: v1 → v7
+
+:: left ::
 
 | Version | Key Change | Platform ρ | Δ |
 |---------|------------|------------|---|
@@ -309,32 +315,29 @@ layout: two-cols
 
 <br>
 
-- **Optuna** (v3) was the biggest pre-innovation gain: +0.0282
-- Each decision was documented and version-controlled
-- OOF ≈ 0.643, Platform ≈ 0.564 — consistent ~0.079 gap
+- Optuna (v3) was the biggest pre-innovation gain: **+0.0282**
+- OOF ≈ 0.643, Platform ≈ 0.564 — consistent gap ~0.079
 
 <br>
 
 > Each engineering decision produced **measurable, documented improvement.**
 
-::right::
+:: right ::
 
-<img src="../figures/score_progression.png" class="h-75 rounded shadow" />
+<img src="/figures/score_progression.png" class="h-80 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Score journey — solid line = OOF, dashed = Platform</small>
+<small class="text-gray-500 text-xs">Solid = OOF Spearman · Dashed = Platform Spearman</small>
 
-<!--
-Notice the gap between OOF and Platform scores is consistent across versions.
-This stability tells us the gap is systematic — not overfitting.
-We investigated this next.
--->
-
-<!-- ───────────────────────────── SLIDE 10: GAP DIAGNOSIS ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: blue-light
 ---
+
+:: title ::
 
 # Why Is There a Gap Between OOF and Platform?
+
+:: left ::
 
 **Observed**: OOF ~0.643, Platform ~0.564 → gap **~0.079**
 
@@ -342,41 +345,35 @@ layout: two-cols
 
 | Hypothesis | Test | Result |
 |-----------|------|--------|
-| Overfitting | Stronger regularization | ❌ Scores got worse |
-| **Distribution shift** | Adversarial validation | ✅ Train/test AUC = 0.9999 |
+| Overfitting | Stronger regularization | ❌ Worse scores |
+| **Distribution shift** | Adversarial validation | ✅ AUC = 0.9999 |
 | | Temporal CV (M1–M4 → M5) | ✅ Gap −0.041 |
 | | TE distribution plot | ✅ Clear mismatch |
 
 <br>
 
-> *"We diagnosed the gap before trying to fix it."*
+Train and test come from **different temporal periods** — shift is structural.
 
-The train and test sets come from **different temporal periods** — distribution shift is unavoidable. Our strategy: focus on **maximizing OOF**, which tracks Platform reliably.
+> *"Diagnose before you optimize."*
 
-::right::
+:: right ::
 
-<img src="../figures/av_probability_distribution.png" class="h-44 rounded shadow mb-2" />
-<img src="../figures/oof_platform_gap.png" class="h-40 rounded shadow" />
+<img src="/figures/av_probability_distribution.png" class="h-44 rounded shadow mb-2" />
+<img src="/figures/oof_platform_gap.png" class="h-40 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Top: AV near-perfect separation. Bottom: stable ~0.077 gap across all versions.</small>
+<small class="text-gray-500 text-xs">Top: near-perfect AV separation. Bottom: stable ~0.077 gap.</small>
 
-<!--
-The adversarial validation result is striking: AUC = 0.9999 means the model
-can almost perfectly distinguish train from test samples.
-This proves the gap is structural distribution shift, not overfitting.
--->
-
-<!-- ─────────────────── SECTION DIVIDER ─────────────────── -->
 ---
 layout: section
+color: cyan
 ---
 
 # Section 4
 ## Key Innovation: Rank-Target Training
 
-<!-- ───────────────────────────── SLIDE 11: MISALIGNED OBJECTIVE ───────────────────────────── -->
 ---
 layout: statement
+color: cyan
 ---
 
 # Training with MSE ≠ Optimizing Spearman
@@ -386,59 +383,54 @@ Spearman only cares about **relative order**.
 
 *Training in the wrong direction.*
 
-<!--
-This is the core insight. Our model was trained to minimize MSE
-but evaluated on Spearman. These are fundamentally different objectives.
-The natural fix: make the training objective match the evaluation metric.
--->
+---
+layout: top-title-two-cols
+color: cyan-light
+---
 
-<!-- ───────────────────────────── SLIDE 12: RANK-TARGET TRANSFORM ───────────────────────────── -->
----
-layout: two-cols
----
+:: title ::
 
 # Solution: Train to Rank, Not to Regress
+
+:: left ::
 
 **Transformation:**
 
 $$y_{\text{rank}} = \frac{\text{rankdata}(y)}{N}$$
 
-- Converts the target to a **uniform [0, 1] distribution** of ranks
-- The model now learns **relative ordering**, not absolute values
-- At inference: predictions are re-ranked → Spearman is computed on ranks
+- Converts target to **uniform [0, 1] distribution** of ranks
+- Model learns **relative ordering**, not absolute values
+- No other changes to the pipeline
 
 <br>
 
-```python {1-2|3-5|all}
+```python {1|2|all}
 # Replace raw target with rank-normalized target
 y_rank = rankdata(train_df['invalid_ratio']) / len(train_df)
-
-# Train exactly as before — no other changes
-lgb_model.fit(X_train, y_rank, ...)
+# Train exactly as before
+lgb_model.fit(X_train, y_rank, sample_weight=weights, ...)
 ```
 
 <br>
 
 > *"One line of code. The biggest single improvement in our entire pipeline."*
 
-::right::
+:: right ::
 
-<img src="../figures/rank_target_diagram.png" class="h-80 rounded shadow" />
+<img src="/figures/rank_target_diagram.png" class="h-80 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Left: skewed original target. Right: uniform rank-transformed target.</small>
+<small class="text-gray-500 text-xs">Left: skewed original target. Right: uniform rank-transformed target.</small>
 
-<!--
-The beauty of this approach is its simplicity.
-By replacing the target with its rank percentile, we directly align
-what the model optimizes with what Spearman measures.
--->
-
-<!-- ───────────────────────────── SLIDE 13: RANK-TARGET RESULTS ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: cyan-light
 ---
+
+:: title ::
 
 # Impact: Rank-Target Delivers Our Largest Gain
+
+:: left ::
 
 | | OOF ρ | Platform ρ | Δ Platform |
 |--|-------|------------|------------|
@@ -448,61 +440,60 @@ layout: two-cols
 
 <br>
 
-- Exp I: Increased LGB iterations 10K → 20K → additional **+0.0007** Platform
+- Exp C alone: rank-target gives **+0.0062** — more than any FE step
+- Exp I-A: LGB iterations 10K → 20K → extra **+0.0007**
 - Final: **Platform 0.5705, Rank #5 globally**
 
 <br>
 
-> Metric alignment gave us the **biggest single-step improvement** of the entire project.
+> Metric alignment = the **biggest single-step improvement** of the project.
 
-::right::
+:: right ::
 
-<img src="../figures/score_progression.png" class="h-75 rounded shadow" />
+<img src="/figures/score_progression.png" class="h-80 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Full journey: v1 (0.5222) → Exp I-A (0.5705)</small>
+<small class="text-gray-500 text-xs">Full journey: v1 (0.5222) → Exp I-A (0.5705)</small>
 
-<!--
-Exp C alone gave us +0.0062 Platform, which is more than any individual
-feature engineering step. This confirms the hypothesis: the training objective matters.
-Exp I-A squeezed out another +0.0007 by giving the rank-trained model more iterations.
--->
-
-<!-- ─────────────────── SECTION DIVIDER ─────────────────── -->
 ---
 layout: section
+color: slate
 ---
 
 # Section 5
 ## Experiment Summary & Analysis
 
-<!-- ───────────────────────────── SLIDE 14: ALL EXPERIMENTS ───────────────────────────── -->
 ---
-layout: default
+layout: top-title
+color: slate-light
 ---
+
+:: title ::
 
 # 9 Experiments: What Worked and What Did Not
 
-<img src="../figures/experiment_summary_chart.png" class="h-88 mx-auto rounded shadow" />
+:: default ::
 
-<div class="text-xs text-gray-400 text-center mt-1">OOF (solid bars) and Platform (hatched bars) scores · green = success · red = failed · yellow = null result</div>
+<img src="/figures/experiment_summary_chart.png" class="h-88 mx-auto rounded shadow" />
 
-<!--
-Key takeaways from this chart:
-- Rank-target (Exp C, I-A) is the clear winner
-- Strong regularization confirmed gap is NOT overfitting
-- TabM deep learning is far behind GBDT
-- Noise removal (Exp H) improved OOF but hurt Platform — distribution shift
-- Pseudo-labeling (Exp G) had zero effect
--->
+<div class="text-xs text-gray-500 text-center mt-1">
+  OOF (solid bars) · Platform (hatched bars) · 
+  <span class="text-green-700 font-bold">Green = success</span> · 
+  <span class="text-red-600 font-bold">Red = failed</span> · 
+  <span class="text-yellow-600 font-bold">Yellow = null result</span>
+</div>
 
-<!-- ───────────────────────────── SLIDE 15: DL FAILURE ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: slate-light
 ---
+
+:: title ::
 
 # Deep Learning Does Not Help Here
 
-- Tested **TabM** (ICLR 2025 — state-of-the-art tabular deep learning)
+:: left ::
+
+- Tested **TabM** (ICLR 2025 — state-of-the-art tabular DL)
 - OOF Spearman: **0.4445** vs GBDT **0.6429** — gap of **0.198**
 - Root cause: only 10 input features, no image/text structure
   → GBDT advantages dominate on compact tabular data
@@ -511,75 +502,67 @@ layout: two-cols
 
 | Model | OOF ρ | Notes |
 |-------|-------|-------|
-| TabM (DL, ICLR 2025) | 0.4445 | Best DL attempt |
-| LGB + XGB (v7) | 0.6429 | Baseline GBDT |
+| TabM (ICLR 2025) | 0.4445 | Best DL attempt |
+| LGB + XGB (v7) | 0.6429 | GBDT baseline |
 | Rank-Target (Exp I-A) | **0.6478** | Our final |
 
 <br>
 
-> *"Domain structure matters more than model architecture."*  
-> More data or richer features would be needed for DL to compete.
+> *"Domain structure matters more than model architecture."*
 
-::right::
+:: right ::
 
-<img src="../figures/tabm_correlation.png" class="h-75 rounded shadow" />
+<img src="/figures/tabm_correlation.png" class="h-80 rounded shadow" />
 
-<small class="text-gray-400 text-xs">TabM prediction correlation — DL predictions poorly correlated with ground truth</small>
+<small class="text-gray-500 text-xs">TabM predictions poorly correlated with ground truth</small>
 
-<!--
-This result is consistent with the tabular ML literature:
-for small feature spaces without spatial/temporal raw structure,
-tree-based methods remain superior.
-TabM is an excellent model for larger feature spaces — just not here.
--->
-
-<!-- ───────────────────────────── SLIDE 16: SHAP INTERPRETABILITY ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: slate-light
 ---
+
+:: title ::
 
 # Understanding the Model with SHAP
 
-- `total_count`: strong **negative** SHAP — busy locations have lower violation rates
+:: left ::
+
+- `total_count`: strong **negative** SHAP — busy locations comply more
 - `grid_te`: captures spatial violation risk per zone
-- Weather features: near-zero SHAP — no meaningful contribution
+- Weather: near-zero SHAP — no meaningful contribution
 - Model decisions are **explainable** and match domain intuition
 
 <br>
 
-**Insight**: the model essentially learns "where are the risky zones, and how busy are they right now?"
+**Insight**: the model learns *"where are the risky zones, and how busy are they right now?"*
 
 <br>
 
-> *"Our model's decisions are explainable and align with real-world intuition."*
+> *"Model decisions are explainable and align with real-world intuition."*
 
-::right::
+:: right ::
 
-<img src="../figures/shap_bar.png" class="h-44 rounded shadow mb-2" />
-<img src="../figures/shap_dep_total_count.png" class="h-40 rounded shadow" />
+<img src="/figures/shap_bar.png" class="h-48 rounded shadow mb-2" />
+<img src="/figures/shap_dep_total_count.png" class="h-40 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Top: mean |SHAP| by feature. Bottom: total_count SHAP dependence.</small>
-
-<!--
-SHAP makes our model interpretable to parking enforcement operators.
-They can understand: zones with high grid_te and low total_count today
-are the highest-risk locations to patrol.
--->
-
-<!-- ─────────────────── SECTION DIVIDER ─────────────────── -->
 ---
 layout: section
+color: navy
 ---
 
 # Section 6
 ## Conclusion
 
-<!-- ───────────────────────────── SLIDE 17: FINAL RESULTS ───────────────────────────── -->
 ---
-layout: two-cols
+layout: top-title-two-cols
+color: navy-light
 ---
 
+:: title ::
+
 # Results: Platform 0.5705, Rank #5
+
+:: left ::
 
 - Official baseline: **0.197** → Our result: **0.5705** → Improvement: **+190%**
 - Leaderboard: **Rank #5 globally**
@@ -588,63 +571,65 @@ layout: two-cols
 
 **Key contributions:**
 
-1. **Tier 2 feature engineering** with leakage-free K-Fold Target Encoding
-2. **Rank-target training** — aligning the training objective with Spearman
+1. **Tier 2 feature engineering** with leakage-free K-Fold TE
+2. **Rank-target training** — aligning training with Spearman
 3. **Systematic gap diagnosis** via adversarial validation
-4. **Sample weighting** to handle label noise in low-count observations
+4. **Sample weighting** to handle label noise
 
 <br>
 
-<img src="../figures/score_progression.png" class="h-36 rounded shadow" />
+<img src="/figures/score_progression.png" class="h-36 rounded shadow" />
 
-::right::
+:: right ::
 
-<img src="../docs/subs/challengedata_ranking.png" class="h-90 rounded shadow" />
+<img src="/subs/challengedata_ranking.png" class="h-90 rounded shadow" />
 
-<small class="text-gray-400 text-xs">Leaderboard — Rank #5 with Platform Spearman 0.5705</small>
+<small class="text-gray-500 text-xs">Rank #5 globally with Platform Spearman 0.5705</small>
 
-<!--
-From a baseline of 0.197 to 0.5705 is nearly a 3x improvement.
-The leaderboard confirms Rank #5 globally among all submissions.
-Our best single insight was aligning training with the evaluation metric.
--->
-
-<!-- ───────────────────────────── SLIDE 18: TAKEAWAYS ───────────────────────────── -->
 ---
-layout: default
+layout: top-title
+color: navy-light
 ---
+
+:: title ::
 
 # Key Takeaways
+
+:: default ::
 
 <br>
 
 <v-clicks>
 
 **Lesson 1: Match your training objective to your evaluation metric**
-→ Rank-target training: the single biggest improvement in the project
+
+→ Rank-target training: the single biggest improvement in the project (+0.0069 Platform)
+
+<br>
 
 **Lesson 2: Diagnose before you optimize**
-→ The OOF-Platform gap was distribution shift, not overfitting — regularization would have made it worse
+
+→ The OOF-Platform gap was distribution shift — regularization would have made it worse
+
+<br>
 
 **Lesson 3: Systematic iteration with quantitative baselines outperforms guesswork**
+
 → Every version tracked, every change measured, every null result documented
 
 </v-clicks>
 
-<br>
-
 <v-click>
 
-**Future directions:**
-- Stacking with additional base models
-- Richer spatial features (POI density, road type, zone category)
-- Cross-city generalization to other THESi deployments
+<br>
+
+**Future directions**: ensemble stacking · richer spatial features (POI, road type) · cross-city generalization
 
 </v-click>
 
 <!--
 Three lessons that apply beyond this project:
 1. Metric alignment is often overlooked but powerful
-2. Systematic diagnosis saves time — don't optimize blindly
+2. Diagnose systematically before trying fixes
 3. Version control your experiments, not just your code
 -->
