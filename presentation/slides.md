@@ -148,11 +148,10 @@ columns: is-one-third
 
 </div>
 
-<img src="/doc-figures/fig2_totalcount_vs_violation.png" class="w-full rounded shadow mt-2" />
-
 :: right ::
 
-<img src="/doc-figures/fig4_spearman_correlation.png" class="w-full rounded shadow" />
+<img src="/doc-figures/fig4_spearman_correlation.png" class="w-full rounded shadow mb-2" />
+<img src="/doc-figures/fig2_totalcount_vs_violation.png" class="w-full rounded shadow" />
 <small class="text-gray-500 text-xs">Spearman correlations — total_count and location dominate</small>
 
 <!--
@@ -197,18 +196,18 @@ sample_weight = np.log1p(total_count)
 <small class="text-gray-500 text-xs">Label noise diagnosis — tc=1 subset shows extreme bimodality</small>
 
 ---
-layout: top-title
+layout: top-title-two-cols
 color: sky-light
+columns: is-one-third
 ---
 
 :: title ::
 
 # Tier 2 Feature Engineering Pipeline
 
-:: default ::
+:: left ::
 
-<div class="flex gap-6 h-full items-start">
-<div class="w-2/5 text-sm leading-relaxed pt-1">
+<div class="text-sm leading-relaxed">
 
 1. **Spatial binning**: Divide map into grids → `grid_x`, `grid_y`, `grid_id`
 2. **K-Fold Target Encoding** (k=5): `grid_te`, `period_te` — captures violation rates per zone without leakage
@@ -221,10 +220,10 @@ color: sky-light
 > **K-Fold TE prevents data leakage — a critical design choice.**
 
 </div>
-<div class="w-3/5 flex justify-center">
-<img src="/figures/feature_engineering_pipeline.png" class="h-88 rounded shadow" />
-</div>
-</div>
+
+:: right ::
+
+<img src="/figures/feature_engineering_pipeline.png" class="w-full max-h-80 object-contain rounded shadow" />
 
 ---
 layout: top-title-two-cols
@@ -481,7 +480,7 @@ color: slate-light
 
 # 9 Experiments: What Worked and What Did Not
 
-:: default ::
+:: content ::
 
 <img src="/figures/experiment_summary_chart.png" class="h-88 mx-auto rounded shadow" />
 
@@ -495,7 +494,7 @@ color: slate-light
 ---
 layout: top-title-two-cols
 color: slate-light
-columns: is-one-third
+columns: is-one-half
 ---
 
 :: title ::
