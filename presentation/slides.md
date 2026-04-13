@@ -14,13 +14,14 @@ background: /doc-figures/fig5_spatial_violation.png
 
 <br>
 
-<div class="text-lg font-semibold">
-  CS5483 Data Mining · April 2026
+<div class="text-xl font-semibold">
+  CS5483 Data Mining · <b>Group 28</b> · April 2026
 </div>
 
 <div class="text-xl font-semibold mt-1">
-  <b>Group 28</b> · Member1 id001 · Member2 id002 · Member3 id003 · Member4 id004
+  memberxxx idxxx
 </div>
+
 
 <br>
 
@@ -585,7 +586,7 @@ columns: is-5
 3. **Systematic gap diagnosis** via adversarial validation
 4. **Sample weighting** to handle label noise
 
-🔗 [Public Leaderboard](https://challengedata.ens.fr/participants/challenges/163/ranking/public)
+🔗 Public Leaderboard: `challengedata.ens.fr/participants/challenges/163/ranking/public`
 
 </div>
 
