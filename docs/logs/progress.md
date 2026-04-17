@@ -1636,7 +1636,116 @@ Exp C 使用 v7 的 Optuna 参数（为 raw bimodal target 调优），但 rank-
 
 ---
 
-## Phase 7 — 视频
+## Phase 7 — 展示视频 ✅
 
-**日期**: 2026-04-06 – 08（计划）  
+**日期**: 2026-04-06 – 13  
+**状态**: 已完成（视频已上传 Canvas）
+
+### 7.1 前期策划（04-06 ~ 04-11）
+
+在 `docs/subs/` 下完成 4 份策划文档：
+
+| 文档 | 内容 |
+|------|------|
+| `01_figure_checklist.md` | 可视化图表清单，确认每张图对应哪页 slide |
+| `02_ppt_structure.md` | 24 页 PPT 结构规划（6 Section + 18 Content） |
+| `03_video_script.md` | 初版视频脚本草稿 |
+| `04_qa_prep.md` | Peer Review Q&A 准备 |
+
+### 7.2 PPT 制作与迭代（04-12）
+
+**技术栈选型**：选用 [Slidev](https://sli.dev/) (Vite + Vue + Markdown) + `slidev-theme-neversink` 学术主题，而非传统 PowerPoint。
+- **优势**：代码高亮、LaTeX 公式、版本控制友好、一键部署为网页
+- **安装**：`@slidev/cli@52.14.2`, `slidev-theme-neversink@0.4.1`, `playwright-chromium`
+
+**PPT 内容**：24 页，覆盖完整项目流程：
+- Section 1: Introduction & Problem Setup（Slide 1-4）
+- Section 2: Data Exploration & Feature Engineering（Slide 5-9）
+- Section 3: Baseline Development & Gap Analysis（Slide 10-13）
+- Section 4: Key Innovation — Rank-Target Training（Slide 14-17）
+- Section 5: Experiment Summary & Analysis（Slide 18-21）
+- Section 6: Conclusion（Slide 22-24）
+
+**经历 4 轮布局修复**（commit `064e2d4` → `e3fe92f`）：
+1. **Round 1**: 图片压缩失真（改用 `w-full` 替代 `h-*` 限高）、Section 颜色过深（navy → sky/blue/teal/slate）、p11/12/13 内容溢出（`text-sm` + 减 `<br>`）
+2. **Round 2**: Cover 徽章颜色改黑色、p4 内容下沉
+3. **Round 3**: 发现 neversink 主题 `top-title` 布局 bug（`:: default ::` slot 使用 `h-full` 导致内容下沉），**根因修复**：全部改为 `top-title-two-cols` + `columns` prop
+4. **Round 4**: p8/p19 下沉修复（转 `top-title-two-cols` / `:: content ::`）、p6 图片大小优化、p20 表格显示不全（加宽列）
+
+**关键技术发现**：
+- `top-title.vue` 的 `:: default ::` slot 有 `h-full`（100% 父高度），在 `flex-col` 里导致内容下沉
+- `top-title-two-cols.vue` 用 `flex-1 min-h-0`，正确填充剩余高度
+- **结论**：内容页永远用 `top-title-two-cols` + `columns` prop 控制列宽，禁用 `top-title` + 自定义 flex
+
+### 7.3 旁白脚本（04-12 ~ 04-13）
+
+编写英文旁白脚本 `docs/subs/voiceover_script.md`：
+- 目标：~1,450 词，~12 分钟（120 wpm，AI 配音语速）
+- 每页 slide 对应一段旁白，标注 `[PAUSE]` 作为转场点
+- 句子保持短到中等长度，无缩写，适合 TTS 朗读
+
+### 7.4 视频自动化合成（04-12 ~ 04-13）
+
+开发 `video_production/make_video.py` 自动化流水线：
+
+```
+voiceover_script.md → TTS 音频 → slide PNG 截图 → FFmpeg 合成 → 最终 MP4
+```
+
+**流水线步骤**：
+1. 解析 `voiceover_script.md`，提取每页 slide 的旁白文本
+2. 使用 **edge-tts**（Microsoft 免费 TTS）生成 24 段音频（voice: `en-US-AriaNeural`）
+3. 使用 Slidev `export --format png` 导出 24 张 1920×1080 PNG
+4. FFmpeg 将每张 slide 图片 + 对应音频合成短片段（含 0.3s fade 过渡）
+5. 拼接所有片段为最终 MP4 + 自动生成 SRT 字幕
+
+**视频参数**：
+- 分辨率：1920×1080, 30fps, H.264 + AAC
+- 每段结尾留 1.0s 静音（`TAIL_SECONDS`），0.3s fade-out 过渡
+- TTS 语速：+0%（正常速度）
+
+**产出文件**：
+
+| 文件 | 说明 |
+|------|------|
+| `video_production/output/final_presentation.mp4` | 最终视频（22 MB, ~13 分 18 秒） |
+| `video_production/output/final_presentation.srt` | 自动生成字幕 |
+| `video_production/output/final_v2.mp4` | 迭代版本 v2（25 MB） |
+| `video_production/audio_v2/slide_*.mp3` | 24 段 TTS 音频（每页一段） |
+| `video_production/slides_png/slide/*.png` | 24 张 slide 截图 |
+| `video_production/make_video.py` | 视频合成脚本 |
+
+### 7.5 封面更新 & PDF 导出（04-13）
+
+- 封面增加团队信息：Group 28 + 4 名成员（commit 后脱敏处理）
+- ChallengeData #163 移至 Platform Spearman 徽章
+- 尝试 PDF 导出（`slidev export`）：p6/12/13 有渲染 bug（CSS 在无头 Chromium 中未完整加载），最终通过分段导出 PDF 规避
+
+### 7.6 部署尝试（04-12 ~ 04-13）
+
+- 创建 GitHub Actions workflow（`.github/workflows/deploy.yml`）自动部署 Slidev 到 GitHub Pages
+- **失败原因**：私有仓库 + GitHub Free 计划不支持 Pages
+- 暂未改为 Public，待课程结束后考虑
+
+### 7.7 视频上传（04-13）
+
+- 最终视频 `final_presentation.mp4` 已上传 Canvas "Group presentation assignment"
+- 视频时长 ~13:18，符合 15 分钟限制
+
+---
+
+### Commit 记录（Phase 7 相关）
+
+| Commit | 描述 |
+|--------|------|
+| `9d99217` | 生成 5 张缺失的可视化图表 |
+| `ec79ad1` | 初版 Slidev 18 页（academic 主题） |
+| `9f24049` | 修复图片路径 + 升级 neversink 主题 |
+| `c7cccdb` | 修复 9 项布局/内容问题 |
+| `064e2d4` ~ `e3fe92f` | 4 轮布局修复（颜色、图片、内容下沉） |
+| `2d6967c` | p6/p8/p19/p20 修复 |
+| `bff330f` | 去重 score_progression、p12 改单列 |
+| `b6ce570` / `f1305ab` | GitHub Actions workflow（未成功） |
+| `e99239e` | .gitignore 更新 + voiceover script |
+| `fa2da1e` / `9693036` | 封面团队信息（脱敏版） |
 **状态**: 未开始

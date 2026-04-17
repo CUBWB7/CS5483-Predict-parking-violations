@@ -26,6 +26,7 @@ build/
 # Code（私有配置）
 .claude/
 CLAUDE.md
+AGENTS.md
 
 # 研究资料和课程背景（不需要入 Git）
 background/
@@ -51,6 +52,11 @@ skills-lock.json
 node_modules/
 presentation/node_modules/
 presentation/.slidev/
+
+# Presentation exports (auto-generated from Slidev)
+presentation/*.pdf
+docs/subs/*-Slidev/
+docs/subs/*Slidev/
 
 # Video podcast maker (external tool, not part of project)
 video-podcast-maker/

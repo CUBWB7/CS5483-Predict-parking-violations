@@ -140,7 +140,7 @@ The raw CSV files (~500 MB total) are too large for GitHub. Download from the co
 - [x] Phase 5b: Gap reduction experiments (Steps 8–14, all negative results)
 - [x] Phase 5c: Final sprint experiments (A–I, complete — best Platform 0.5705 🎉)
 - [ ] Phase 6: Report (~15 pages, deadline 2026-04-23)
-- [ ] Phase 7: Presentation video (15 min, deadline 2026-04-15)
+- [x] Phase 7: Presentation video (15 min, deadline 2026-04-15)
 
 ## Group Server Setup (JupyterHub)
 
