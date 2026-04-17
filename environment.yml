@@ -19,3 +19,7 @@ dependencies:
   - jupyterlab
   - ipykernel
   - tqdm
+  - pyarrow
+  - optuna
+  # Optional: only needed for neural network experiments (Exp E, step14_gpu.py)
+  # - pytorch::pytorch

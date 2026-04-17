@@ -60,7 +60,7 @@ columns: is-one-third
 - **Training set**: 6.07 M observations, 10 features
 - **Target**: `invalid_ratio` — fraction of invalid parking events per location-timeslot
 - **Evaluation**: Spearman rank correlation ρ
-- **Train / Test / Features**: 6.07 M · 1.5 M · 10
+- **Train / Test / Features**: 6.07 M · 2.03 M · 10
 
 > **The metric rewards ranking, not numerical accuracy.**
 
