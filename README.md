@@ -76,8 +76,14 @@ The raw CSV files (~500 MB total) are too large for GitHub. Download from the co
 │   ├── step12_gpu.py                # Constrained re-Optuna (GPU)
 │   ├── step13_gpu.py                # DART boosting (GPU)
 │   ├── step14_gpu.py                # Neural Network MLP/ResNet (GPU)
+│   ├── step_c_gpu.py               # Rank-target training (GPU) — Exp C
+│   ├── step_i_gpu.py               # Rank-target re-tuning (GPU) — Exp I-A (best)
 │   ├── check_step12_files.py        # Utility: verify step12 output files
 │   └── recover_v7_preds.py          # Utility: recover v7 prediction files
+├── report/                           # Project report
+│   └── report.md                    # Main report (Markdown → Pandoc → PDF)
+├── presentation/                     # Slidev presentation (video submitted)
+│   └── slides.md                    # 24-slide deck
 ├── docs/
 │   ├── project_plan.md              # Project plan & timeline
 │   ├── literature_review.md         # Review of 7 related papers
@@ -139,8 +145,8 @@ The raw CSV files (~500 MB total) are too large for GitHub. Download from the co
 - [x] Phase 5a: Improvement (Optuna tuning, CatBoost, sample weighting → v7)
 - [x] Phase 5b: Gap reduction experiments (Steps 8–14, all negative results)
 - [x] Phase 5c: Final sprint experiments (A–I, complete — best Platform 0.5705 🎉)
-- [ ] Phase 6: Report (~15 pages, deadline 2026-04-23)
-- [x] Phase 7: Presentation video (15 min, deadline 2026-04-15)
+- [ ] Phase 6: Report (~15 pages, deadline 2026-04-23) — content written, pending final polish
+- [x] Phase 7: Presentation video (15 min, uploaded 2026-04-13)
 
 ## Group Server Setup (JupyterHub)
 
@@ -218,8 +224,8 @@ Key papers used in this project (see `docs/literature_review.md` for full review
 | Phase 5a 提分 | ✅ | Optuna 调参 + sample weighting → v7，平台 **0.5636** |
 | Phase 5b Gap 实验 | ✅ | Steps 8–14 均为负面结果（TE 偏移、正则化、DART、NN） |
 | Phase 5c 冲刺实验 | ✅ | 实验 A–I 完成，平台最佳 **0.5705** 🎉，排名第 5 |
-| Phase 6 报告 | ❌ | 截止 4/23 |
-| Phase 7 展示视频 | ❌ | 截止 4/15 |
+| Phase 6 报告 | 🔄 | 正文已完成，待最终润色，截止 4/23 |
+| Phase 7 展示视频 | ✅ | 已上传 Canvas (4/13) |
 
 ### 关键文档
 
