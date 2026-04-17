@@ -55,6 +55,9 @@ presentation/.slidev/
 
 # Presentation exports (auto-generated from Slidev)
 presentation/*.pdf
+
+# Report PDF (generated via Pandoc)
+report/*.pdf
 docs/subs/*-Slidev/
 docs/subs/*Slidev/
 
