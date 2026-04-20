@@ -1,4 +1,4 @@
-# 数据文件（太大，不上传 GitHub）
+# Data files (too large for GitHub)
 163-Predict parking violations/*.csv
 data/*.parquet
 data/*.pkl
@@ -23,17 +23,17 @@ build/
 .vscode/
 .idea/
 
-# Code（私有配置）
+# Private AI assistant config
 .claude/
 CLAUDE.md
 AGENTS.md
 
-# 研究资料和课程背景（不需要入 Git）
+# Local research material and course background
 background/
 research_parking_violations/
 research_funsearch_alphaevolve/
 
-# Models & submissions（太大，本地保留）
+# Models & submissions (too large; reproducible via notebooks)
 models/
 submissions/
 catboost_info/
@@ -41,7 +41,7 @@ catboost_info/
 # Duplicate notebooks
 notebooks/*_executed.ipynb
 
-# 临时文件
+# Temporary files
 *.tmp
 *.bak
 *.log
@@ -50,16 +50,22 @@ notebooks/*_executed.ipynb
 .agents/
 skills-lock.json
 node_modules/
-presentation/node_modules/
-presentation/.slidev/
 
-# Presentation exports (auto-generated from Slidev)
-presentation/*.pdf
+# Presentation: only the final exported slides PDF is public
+presentation/*
+!presentation/Predicting Parking Violation Rates Using Gradient Boosting - new.pdf
 
-# Report PDF (generated via Pandoc)
-report/*.pdf
-docs/subs/*-Slidev/
-docs/subs/*Slidev/
+# Report folder — final report is submitted via course platform
+report/
+
+# Internal planning/subs drafts (Chinese working docs)
+docs/plan/
+docs/subs/
+
+# Chinese originals; English equivalents are published instead
+docs/project_plan.md
+docs/literature_review.md
+docs/logs/progress.md
 
 # Video podcast maker (external tool, not part of project)
 video-podcast-maker/
